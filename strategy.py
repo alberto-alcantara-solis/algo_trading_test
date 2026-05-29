@@ -540,7 +540,8 @@ class Strategy:
             min_close = (self.st.min_close_fvg
                          if self.st.min_close_fvg is not None
                          else self.st.bot_lim_fvg)
-            sl = round((min_close + c1.low) / 2.0, 2)
+            #sl = round((min_close + c1.low) / 2.0, 2)
+            sl = round(c1.low, 2)
             tp = round(entry + config.RISK_REWARD * (entry - sl), 2)
 
             if sl >= entry:
@@ -556,7 +557,8 @@ class Strategy:
             max_close = (self.st.max_close_fvg
                          if self.st.max_close_fvg is not None
                          else self.st.top_lim_fvg)
-            sl = round((max_close + c1.high) / 2.0, 2)
+            #sl = round((max_close + c1.high) / 2.0, 2)
+            sl = round(c1.high, 2)
             tp = round(entry - config.RISK_REWARD * (sl - entry), 2)
 
             if sl <= entry:
