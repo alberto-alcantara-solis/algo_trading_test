@@ -178,7 +178,7 @@ class Strategy:
 
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Orquestador del procesado de velas
+    # Orquestador de la ejecución
     # ─────────────────────────────────────────────────────────────────────────
     def _process_bars(self, all_bars: List[Candle]):
         """
@@ -229,7 +229,7 @@ class Strategy:
 
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Procesado de la estrategia (para cada vela cerrada)
+    # Ejecución de la estrategia (para cada vela cerrada)
     # ─────────────────────────────────────────────────────────────────────────
     def _process_one_bar(
         self,
@@ -333,7 +333,7 @@ class Strategy:
 
         if s == S.WAIT_2ND_CONF:
             self._update_fvg_extremes(bar)
-            current_ema = ema(session_closes, config.EMA_LENGTH)
+            current_ema = ema(session_closes, config.EMA_LENGTH, self._ema_seed())
 
             if self.st.direction == Dir.LONG:
                 if bar.close < self.st.bot_lim_fvg:
@@ -395,7 +395,7 @@ class Strategy:
                 return
 
             # ⚠️ Condición de seguridad crítica: cancelar si precio rompe el FVG o cruza el EMA
-            current_ema = ema(session_closes, config.EMA_LENGTH)
+            current_ema = ema(session_closes, config.EMA_LENGTH, self._ema_seed())
             if self.st.direction == Dir.LONG:
                 should_cancel = bar.close < self.st.bot_lim_fvg or (current_ema is not None and bar.close < current_ema)
                 if should_cancel:
@@ -421,7 +421,7 @@ class Strategy:
                 self.st.status = S.WAITING_BREAK
                 return
 
-            current_ema = ema(session_closes, config.EMA_LENGTH)
+            current_ema = ema(session_closes, config.EMA_LENGTH, self._ema_seed())
             if current_ema is not None:
                 ema_breach = (
                     (self.st.direction == Dir.LONG  and bar.close < current_ema) or
@@ -466,6 +466,15 @@ class Strategy:
             and bar.close < self.st.bot_lim
             and bar.is_red
         )
+    
+    def _ema_seed(self) -> Optional[float]:
+        if self.st._ema_seed_cache is not None:
+            return self.st._ema_seed_cache
+        bars = self.st.opening_bars
+        if len(bars) < config.OPENING_RANGE_BARS:
+            return None
+        self.st._ema_seed_cache = sum(b["close"] for b in bars) / len(bars)
+        return self.st._ema_seed_cache
     
     def _enter_waiting_fvg(self, c2: Candle, c1: Candle, direction: str):
         """Almacena C1 y C2, resetea el FVG anterior y avanza a WAITING_FVG."""

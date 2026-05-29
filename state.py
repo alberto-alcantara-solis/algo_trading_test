@@ -88,6 +88,8 @@ class BotState:
 
     replay_from_ts: Optional[str] = None
 
+    _ema_seed_cache: Optional[float] = None
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers
@@ -136,4 +138,5 @@ class BotState:
         self.top_lim = self.bot_lim = None
         self.last_bar_ts      = None
         self.replay_from_ts   = None
+        self._ema_seed_cache  = None
         self.reset_fvg()
