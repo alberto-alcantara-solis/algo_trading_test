@@ -1,27 +1,21 @@
 """
 main.py — Loop principal del bot de trading.
-
-Arranca el bot, carga el estado persistido y ejecuta un tick cada
-CHECK_INTERVAL_SEC segundos. Se puede detener limpiamente con Ctrl+C
-o enviando SIGTERM; el estado siempre queda guardado en disco.
-
-Uso:
-    python main.py
+─────────────────────────────────────────────
+Arranca el bot, carga el estado guardado y ejecuta un tick cada CHECK_INTERVAL_SEC segundos.
 """
+
 
 import logging
 import signal
 import sys
 import time
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import config
 from broker import Broker
 from state import BotState
 from strategy import Strategy
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+
 logging.basicConfig(
     level   = logging.INFO,
     format  = "%(asctime)s  %(levelname)-8s  %(message)s",
@@ -33,10 +27,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ── Parada limpia ─────────────────────────────────────────────────────────────
 _running = True
 
-def _handle_stop(sig, frame):
+
+def _handle_stop(sig):
     global _running
     log.info(f"Señal {sig} recibida — parando después del tick actual...")
     _running = False
@@ -44,8 +38,6 @@ def _handle_stop(sig, frame):
 signal.signal(signal.SIGINT,  _handle_stop)
 signal.signal(signal.SIGTERM, _handle_stop)
 
-
-# ── Arranque ──────────────────────────────────────────────────────────────────
 
 def main():
     log.info("=" * 65)
@@ -63,7 +55,6 @@ def main():
                   "ALPACA_SECRET_KEY en el fichero .env")
         sys.exit(1)
 
-    # Cargar estado persistido (o crear uno nuevo si no existe)
     state  = BotState.load(config.STATE_FILE)
     broker = Broker()
     strat  = Strategy(broker, state)
@@ -73,7 +64,6 @@ def main():
         f"Fecha sesión: {state.trade_date or 'ninguna'}"
     )
 
-    # ── Loop principal ────────────────────────────────────────────────────────
     while _running:
         tick_start = time.monotonic()
         try:
@@ -81,10 +71,8 @@ def main():
         except KeyboardInterrupt:
             break
         except Exception as exc:
-            # Un error en el tick no detiene el bot; se loguea y se continúa
             log.error(f"Error inesperado en tick: {exc}", exc_info=True)
 
-        # Dormir el tiempo restante para mantener el intervalo constante
         elapsed = time.monotonic() - tick_start
         sleep_time = max(0.0, config.CHECK_INTERVAL_SEC - elapsed)
         time.sleep(sleep_time)

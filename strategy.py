@@ -177,87 +177,32 @@ class Strategy:
         log.info("Sesión terminada. Esperando al día siguiente.")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ─────────────────────────────────────────────────────────────────────────
     # Orquestador del procesado de velas
     # ─────────────────────────────────────────────────────────────────────────
     def _process_bars(self, all_bars: List[Candle]):
         """
         Determina qué velas procesar y las pasa a la máquina de estados.
-
-        En modo normal: solo procesa velas nuevas (posteriores a last_bar_ts).
-        En modo replay: procesa todas las velas desde C2 del último FVG,
-                        para no perder patrones que se formaron mientras el bot
-                        estaba en otro estado.
-
-        Regla de órdenes: solo se puede lanzar una orden si la vela que
-        genera la 2ª confirmación es la MÁS RECIENTE de toda la sesión.
+            En modo normal: solo procesa velas nuevas (posteriores a last_bar_ts).
+            En modo replay: procesa todas las velas desde C2 del último FVG.
         """
         if not all_bars:
             return
 
         latest_ts = all_bars[-1].timestamp
 
-        # ── Modo replay ───────────────────────────────────────────────────────
+        # Modo replay
         if self.st.replay_from_ts and self.st.status == S.WAITING_BREAK:
             replay_dt   = _dt(self.st.replay_from_ts)
             to_process  = [b for b in all_bars if _dt(b.timestamp) >= replay_dt]
-            # Limpiamos el flag ANTES de procesar para que los saves intermedios
-            # ya no relancen el replay si el proceso se reinicia a mitad
             self.st.replay_from_ts = None
-            self.st.last_bar_ts    = None   # Procesar todo el rango desde C2
+            self.st.last_bar_ts    = None
             log.info(
                 f"🔄 Replay desde {replay_dt.strftime('%H:%M UTC')} "
                 f"({len(to_process)} velas)"
             )
 
-        # ── Modo normal ───────────────────────────────────────────────────────
+        # Modo normal
         else:
             if self.st.last_bar_ts:
                 last_dt    = _dt(self.st.last_bar_ts)
@@ -268,27 +213,24 @@ class Strategy:
         if not to_process:
             return
 
-        # Índice de posición de cada vela en la sesión completa (para prev_bar y closes)
         ts_to_idx = {b.timestamp: i for i, b in enumerate(all_bars)}
 
         for bar in to_process:
             idx      = ts_to_idx.get(bar.timestamp, 0)
             prev_bar = all_bars[idx - 1] if idx > 0 else None
 
-            # Cierres de sesión hasta esta vela inclusive (para EMA)
             session_closes = [b.close for b in all_bars[: idx + 1]]
 
-            # Solo se puede lanzar orden si esta vela es la más reciente
             can_place_order = (bar.timestamp == latest_ts)
 
             self._process_one_bar(bar, prev_bar, session_closes, can_place_order)
             self.st.last_bar_ts = bar.timestamp
-            self.st.save(config.STATE_FILE)   # Persistir tras cada vela
+            self.st.save(config.STATE_FILE)
+
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Máquina de estados: procesado de una sola vela
+    # Procesado de la estrategia (para cada vela cerrada)
     # ─────────────────────────────────────────────────────────────────────────
-
     def _process_one_bar(
         self,
         bar: Candle,
@@ -297,9 +239,7 @@ class Strategy:
         can_place_order: bool,
     ):
         """
-        Avanza la máquina de estados para una vela cerrada.
-        `can_place_order` es False cuando la vela es del replay (no la más reciente),
-        lo que impide lanzar órdenes sobre confirmaciones caducadas.
+        Avanza los estados analizando las velas.
         """
         s = self.st.status
         log.debug(
@@ -307,7 +247,6 @@ class Strategy:
             f"O={bar.open:.2f} H={bar.high:.2f} L={bar.low:.2f} C={bar.close:.2f}"
         )
 
-        # ── CALC_RANGE: acumular las primeras N velas ─────────────────────────
         if s == S.CALC_RANGE:
             self.st.opening_bars.append(bar.to_dict())
             if len(self.st.opening_bars) >= config.OPENING_RANGE_BARS:
@@ -320,10 +259,9 @@ class Strategy:
                 )
             return
 
-        # ── WAITING_BREAK: buscar ruptura de topLim (Long) o botLim (Short) ───
         if s == S.WAITING_BREAK:
             if prev is None:
-                return   # Sin vela anterior no podemos definir C1
+                return
 
             d = config.TRADE_DIRECTION
 
@@ -335,38 +273,33 @@ class Strategy:
                 self._enter_waiting_fvg(c2=bar, c1=prev, direction=Dir.SHORT)
                 return
 
-            return   # No hay break: esperar siguiente vela
+            return
 
-        # ── WAITING_FVG: la vela actual ES C3; comprobar si hay FVG ──────────
         if s == S.WAITING_FVG:
             c1  = Candle.from_dict(self.st.c1)
-            c3  = bar   # Esta vela cierra el patrón de tres velas
+            c3  = bar
 
             if self.st.direction == Dir.LONG:
-                # FVG Long: hueco entre máximo de C1 y mínimo de C3
                 fvg_ok  = c3.low > c1.high
-                top_fvg = c3.low    # Mínimo de C3
-                bot_fvg = c1.high   # Máximo de C1
+                top_fvg = c3.low
+                bot_fvg = c1.high
             else:
-                # FVG Short: hueco entre mínimo de C1 y máximo de C3
                 fvg_ok  = c3.high < c1.low
-                top_fvg = c1.low    # Mínimo de C1
-                bot_fvg = c3.high   # Máximo de C3
+                top_fvg = c1.low
+                bot_fvg = c3.high
 
             if not fvg_ok:
                 log.info(f"  ✗ No hay FVG [{self.st.direction}] → WAITING_BREAK")
-                # No replay: C2 no generó FVG, se busca un nuevo break normalmente
                 self.st.reset_fvg()
                 self.st.status = S.WAITING_BREAK
                 return
 
-            # FVG confirmado
             self.st.c3          = c3.to_dict()
             self.st.top_lim_fvg = top_fvg
             self.st.bot_lim_fvg = bot_fvg
             self.st.min_close_fvg = None
             self.st.max_close_fvg = None
-            self._update_fvg_extremes(c3)   # C3 puede cerrar dentro del FVG
+            self._update_fvg_extremes(c3)
             self.st.status = S.WAIT_1ST_CONF
             log.info(
                 f"  ✓ FVG [{self.st.direction}] → WAIT_1ST_CONF | "
@@ -374,95 +307,80 @@ class Strategy:
             )
             return
 
-        # ── WAIT_1ST_CONF: esperar que una vela cierre DENTRO del FVG ─────────
         if s == S.WAIT_1ST_CONF:
             self._update_fvg_extremes(bar)
 
             if self.st.direction == Dir.LONG:
-                # Cancelación: cierra por debajo del FVG
                 if bar.close < self.st.bot_lim_fvg:
                     log.info("  ✗ 1ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
-                # 1ª confirmación: abre sobre topFVG, cierra dentro del FVG
-                if (bar.open > self.st.top_lim_fvg
-                        and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
+                
+                if (bar.open > self.st.top_lim_fvg and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
                     self.st.status = S.WAIT_2ND_CONF
                     log.info("  ✓ 1ª confirmación [LONG] → WAIT_2ND_CONF")
                 return
-
-            else:  # SHORT
-                # Cancelación: cierra por encima del FVG
+            else:
                 if bar.close > self.st.top_lim_fvg:
                     log.info("  ✗ 1ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
-                # 1ª confirmación: abre bajo botFVG, cierra dentro del FVG
-                if (bar.open < self.st.bot_lim_fvg
-                        and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
+                
+                if (bar.open < self.st.bot_lim_fvg and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
                     self.st.status = S.WAIT_2ND_CONF
                     log.info("  ✓ 1ª confirmación [SHORT] → WAIT_2ND_CONF")
                 return
 
-        # ── WAIT_2ND_CONF: esperar confirmación final + EMA ────────────────────
         if s == S.WAIT_2ND_CONF:
             self._update_fvg_extremes(bar)
-            current_ema = ema_seeded(session_closes, self._prev_closes, config.EMA_LENGTH)
+            current_ema = ema(session_closes, config.EMA_LENGTH)
 
             if self.st.direction == Dir.LONG:
-                # Cancelación: cierra por debajo del FVG
                 if bar.close < self.st.bot_lim_fvg:
                     log.info("  ✗ 2ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
 
-                # ¿Cruza topLimFVG hacia arriba?
-                crosses_fvg = (bar.open < self.st.top_lim_fvg
-                               and bar.close > self.st.top_lim_fvg)
+                crosses_fvg = (bar.open < self.st.top_lim_fvg and bar.close > self.st.top_lim_fvg)
 
                 if not crosses_fvg:
-                    return   # Sin cruce: esperar siguiente vela
+                    return
 
                 crosses_top_lim = bar.close > self.st.top_lim
-                ema_ok          = (current_ema is None or bar.close > current_ema)
+                ema_ok          = (bar.close > current_ema)
 
                 if crosses_top_lim and ema_ok:
-                    # ✅ Confirmación completa
                     if not can_place_order:
-                        # La confirmación ocurrió en una vela pasada (replay)
                         log.info("  ↩ 2ª conf LONG completa pero en replay → WAIT_1ST_CONF")
                         self.st.status = S.WAIT_1ST_CONF
                     else:
+                        log.info("  ✓ 2ª conf LONG completa → ORDER LAUNCH")
                         self._launch_order(bar, current_ema)
                 else:
-                    # Cruza FVG pero falla topLim o EMA → volver a 1ª confirmación
                     reason = "no cruza topLim" if not crosses_top_lim else "bajo EMA"
                     log.info(f"  ↩ 2ª conf LONG parcial ({reason}) → WAIT_1ST_CONF")
                     self.st.status = S.WAIT_1ST_CONF
                 return
-
-            else:  # SHORT
-                # Cancelación: cierra por encima del FVG
+            else:
                 if bar.close > self.st.top_lim_fvg:
                     log.info("  ✗ 2ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
 
-                # ¿Cruza botLimFVG hacia abajo?
-                crosses_fvg = (bar.open > self.st.bot_lim_fvg
-                               and bar.close < self.st.bot_lim_fvg)
+                crosses_fvg = (bar.open > self.st.bot_lim_fvg and bar.close < self.st.bot_lim_fvg)
 
                 if not crosses_fvg:
-                    return   # Sin cruce: esperar siguiente vela
+                    return
 
                 crosses_bot_lim = bar.close < self.st.bot_lim
-                ema_ok          = (current_ema is None or bar.close < current_ema)
+                ema_ok          = (bar.close < current_ema)
 
                 if crosses_bot_lim and ema_ok:
                     if not can_place_order:
                         log.info("  ↩ 2ª conf SHORT completa pero en replay → WAIT_1ST_CONF")
                         self.st.status = S.WAIT_1ST_CONF
                     else:
+                        log.info("  ✓ 2ª conf SHORT completa → ORDER LAUNCH")
                         self._launch_order(bar, current_ema)
                 else:
                     reason = "no cruza botLim" if not crosses_bot_lim else "sobre EMA"
@@ -470,43 +388,40 @@ class Strategy:
                     self.st.status = S.WAIT_1ST_CONF
                 return
 
-        # ── ORDER_LAUNCHED: orden límite pendiente de ejecución ───────────────
         if s == S.ORDER_LAUNCHED:
-            # ¿La orden ya se ejecutó?
             if self.broker.is_order_filled(self.st.order_id):
                 self.st.status = S.MONITORING
                 log.info(f"  ✅ Orden {self.st.order_id} ejecutada → MONITORING")
                 return
 
-            # ⚠️ Condición de seguridad crítica: cancelar si precio rompe el FVG
-            # (Puede que la orden límite nunca se ejecute si el precio sigue sin
-            #  volver, y esta condición garantiza que no se ejecute en zona inválida)
+            # ⚠️ Condición de seguridad crítica: cancelar si precio rompe el FVG o cruza el EMA
+            current_ema = ema(session_closes, config.EMA_LENGTH)
             if self.st.direction == Dir.LONG:
-                should_cancel = bar.close < self.st.bot_lim_fvg
+                should_cancel = bar.close < self.st.bot_lim_fvg or (current_ema is not None and bar.close < current_ema)
+                if should_cancel:
+                    reason = "precio fuera del FVG" if (bar.close < self.st.bot_lim_fvg) else "bajo EMA"
             else:
-                should_cancel = bar.close > self.st.top_lim_fvg
+                should_cancel = bar.close > self.st.top_lim_fvg or (current_ema is not None and bar.close > current_ema)
+                if should_cancel:
+                    reason = "precio fuera del FVG" if (bar.close > self.st.top_lim_fvg) else "sobre EMA"
 
             if should_cancel:
                 log.warning(
                     f"  🚫 Condición de seguridad: cancelando orden {self.st.order_id} "
-                    f"(precio fuera del FVG) → WAITING_BREAK (replay)"
+                    f"({reason}) → WAITING_BREAK (replay)"
                 )
                 self.broker.cancel_order(self.st.order_id)
                 self._cancel_to_break()
             return
 
-        # ── MONITORING: posición abierta; vigilar EMA y esperar TP/SL ─────────
         if s == S.MONITORING:
-            # ¿La posición ya fue cerrada por TP o SL (gestionados por Alpaca)?
             if not self.broker.has_open_position(config.SYMBOL):
                 log.info("  ✅ Posición cerrada (TP o SL alcanzado) → WAITING_BREAK")
                 self.st.reset_fvg()
                 self.st.status = S.WAITING_BREAK
-                # Sin replay: la orden completó su ciclo; seguimos con los mismos topLim/botLim
                 return
 
-            # Condición de seguridad EMA: si el cierre cae bajo el EMA → vender
-            current_ema = ema_seeded(session_closes, self._prev_closes, config.EMA_LENGTH)
+            current_ema = ema(session_closes, config.EMA_LENGTH)
             if current_ema is not None:
                 ema_breach = (
                     (self.st.direction == Dir.LONG  and bar.close < current_ema) or
@@ -522,10 +437,10 @@ class Strategy:
                     self.st.status = S.WAITING_BREAK
             return
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Helpers de condiciones de break
-    # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Helpers
+    # ─────────────────────────────────────────────────────────────────────────
     def _is_long_break(self, bar: Candle) -> bool:
         """
         Ruptura alcista (C2 para Long):
@@ -551,11 +466,7 @@ class Strategy:
             and bar.close < self.st.bot_lim
             and bar.is_red
         )
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Helpers de transición de estado
-    # ─────────────────────────────────────────────────────────────────────────
-
+    
     def _enter_waiting_fvg(self, c2: Candle, c1: Candle, direction: str):
         """Almacena C1 y C2, resetea el FVG anterior y avanza a WAITING_FVG."""
         self.st.reset_fvg()
@@ -571,7 +482,6 @@ class Strategy:
     def _cancel_to_break(self):
         """
         Vuelve a WAITING_BREAK y programa un replay desde C2.
-        El replay se ejecutará en la siguiente llamada a _process_bars.
         """
         if self.st.c2:
             self.st.replay_from_ts = self.st.c2["timestamp"]
@@ -583,8 +493,7 @@ class Strategy:
 
     def _update_fvg_extremes(self, bar: Candle):
         """
-        Rastrea el cierre mínimo (Long) y máximo (Short) de velas que han cerrado
-        DENTRO del FVG. Sin importar donde haya abierto la vela.
+        Rastrea el cierre mínimo (Long) y máximo (Short) de velas que han cerrado DENTRO del FVG.
         Usado para calcular el Stop Loss cuando se lanza la orden.
         """
         if self.st.bot_lim_fvg is None or self.st.top_lim_fvg is None:
@@ -595,10 +504,10 @@ class Strategy:
             if self.st.max_close_fvg is None or bar.close > self.st.max_close_fvg:
                 self.st.max_close_fvg = bar.close
 
+
     # ─────────────────────────────────────────────────────────────────────────
     # Cálculo y lanzamiento de orden
     # ─────────────────────────────────────────────────────────────────────────
-
     def _launch_order(self, bar: Candle, ema_val: Optional[float]):
         """
         Calcula SL y TP, lanza la orden bracket y actualiza el estado.
@@ -606,25 +515,23 @@ class Strategy:
         Long:
             entry = bar.close
             SL    = midpoint(min_close_dentro_FVG, mínimo_de_C1)
-            TP    = entry + 2.75 × (entry − SL)
+            TP    = entry + 2.75 x (entry - SL)
 
         Short:
             entry = bar.close
             SL    = midpoint(max_close_dentro_FVG, máximo_de_C1)
-            TP    = entry − 2.75 × (SL − entry)
+            TP    = entry - 2.75 x (SL - entry)
         """
         entry = bar.close
         c1    = Candle.from_dict(self.st.c1)
 
         if self.st.direction == Dir.LONG:
-            # Fallback a botLimFVG si ninguna vela cerró dentro del FVG
             min_close = (self.st.min_close_fvg
                          if self.st.min_close_fvg is not None
                          else self.st.bot_lim_fvg)
             sl = round((min_close + c1.low) / 2.0, 2)
             tp = round(entry + config.RISK_REWARD * (entry - sl), 2)
 
-            # Validación de coherencia: SL siempre debe ser < entry para Long
             if sl >= entry:
                 log.error(
                     f"SL ({sl:.2f}) >= entry ({entry:.2f}) para LONG — "
@@ -634,15 +541,13 @@ class Strategy:
                 return
 
             order_id = self.broker.place_long_bracket(config.SYMBOL, entry, sl, tp)
-
-        else:  # SHORT
+        else:
             max_close = (self.st.max_close_fvg
                          if self.st.max_close_fvg is not None
                          else self.st.top_lim_fvg)
             sl = round((max_close + c1.high) / 2.0, 2)
             tp = round(entry - config.RISK_REWARD * (sl - entry), 2)
 
-            # Validación de coherencia: SL siempre debe ser > entry para Short
             if sl <= entry:
                 log.error(
                     f"SL ({sl:.2f}) <= entry ({entry:.2f}) para SHORT — "
