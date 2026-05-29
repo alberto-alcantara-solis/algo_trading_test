@@ -15,7 +15,7 @@ Reglas clave:
 
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
@@ -481,10 +481,12 @@ class Strategy:
 
     def _cancel_to_break(self):
         """
-        Vuelve a WAITING_BREAK y programa un replay desde C2.
+        Vuelve a WAITING_BREAK y programa un replay desde C2 + 1 minuto.
+        Sumarle 1 minuto asegura que la vela inicial del replay sea diferente a la del patrón detectado, evitando bucles.
         """
         if self.st.c2:
-            self.st.replay_from_ts = self.st.c2["timestamp"]
+            c2_dt = _dt(self.st.c2["timestamp"])
+            self.st.replay_from_ts = (c2_dt + timedelta(minutes=1)).isoformat()
             log.info(
                 f"  🔄 Replay programado desde {self.st.replay_from_ts[11:16]}"
             )

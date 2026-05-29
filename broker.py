@@ -57,8 +57,8 @@ class Broker:
             raise ValueError(f"Mercado cerrado el {d}")
 
         day      = cal[0]
-        open_utc  = datetime.combine(d, day.open,  tzinfo=NY).astimezone(UTC)
-        close_utc = datetime.combine(d, day.close, tzinfo=NY).astimezone(UTC)
+        open_utc  = datetime.combine(d, day.open.time(),  tzinfo=NY).astimezone(UTC)
+        close_utc = datetime.combine(d, day.close.time(), tzinfo=NY).astimezone(UTC)
         return open_utc, close_utc
 
     def get_closed_bars(
