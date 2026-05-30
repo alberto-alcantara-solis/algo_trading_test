@@ -1,7 +1,9 @@
 """
-backtest.py — Motor de backtesting.
-─────────────────────────────────────
+backtest.py — Motor de backtesting (optimizado).
+─────────────────────────────────────────────────
 Ejecuta la estrategia completa sobre datos históricos reales de Alpaca sin tocar ninguna orden real.
+
+Optimización: todos los datos del día se obtienen en UNA sola llamada a la API antes de iniciar la simulación..
 
 Uso:
     python backtest.py --start 2024-01-02 --end 2024-01-31
@@ -20,11 +22,18 @@ Opciones:
 import argparse
 import logging
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+from alpaca.data.enums import DataFeed
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import GetCalendarRequest
+
 import config
-from state import BotState, S
+from state import BotState, S, Candle
 from strategy import Strategy
 from backtest_broker import BacktestBroker
 
@@ -41,6 +50,52 @@ UTC = ZoneInfo("UTC")
 NY  = ZoneInfo("America/New_York")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _fetch_calendar(tc: TradingClient, start: date, end: date) -> dict:
+    """
+    Obtiene el calendario de mercado en una sola llamada para todo el rango.
+    """
+    cal = tc.get_calendar(GetCalendarRequest(start=start, end=end))
+    result = {}
+    for day in cal:
+        d = day.open.date()
+        open_utc  = datetime.combine(d, day.open.time(),  tzinfo=NY).astimezone(UTC)
+        close_utc = datetime.combine(d, day.close.time(), tzinfo=NY).astimezone(UTC)
+        result[d] = (open_utc, close_utc)
+    return result
+
+def _fetch_day_bars(
+    dc: StockHistoricalDataClient,
+    symbol: str,
+    open_utc: datetime,
+    close_utc: datetime,
+) -> list:
+    """
+    Obtiene TODAS las velas de 1 minuto del día en UNA sola llamada a la API.
+    """
+    req = StockBarsRequest(
+        symbol_or_symbols = symbol,
+        timeframe         = TimeFrame(1, TimeFrameUnit.Minute),
+        start             = open_utc,
+        end               = close_utc,
+        feed              = DataFeed.IEX,
+    )
+    resp = dc.get_stock_bars(req)
+    if symbol not in resp.data:
+        return []
+    return [
+        Candle(
+            timestamp = b.timestamp.astimezone(UTC).isoformat(),
+            open      = float(b.open),
+            high      = float(b.high),
+            low       = float(b.low),
+            close     = float(b.close),
+        )
+        for b in resp.data[symbol]
+    ]
+
 def _date_range(start: date, end: date):
     """Genera todas las fechas entre start y end (inclusive)."""
     d = start
@@ -48,6 +103,10 @@ def _date_range(start: date, end: date):
         yield d
         d += timedelta(days=1)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Motor principal
+# ─────────────────────────────────────────────────────────────────────────────
 def run_backtest(
     start_date: date,
     end_date:   date,
@@ -63,7 +122,7 @@ def run_backtest(
     broker = BacktestBroker(initial_capital=capital)
 
     log.info("=" * 65)
-    log.info("   BACKTEST INICIADO")
+    log.info("   BACKTEST INICIADO (modo optimizado)")
     log.info(f"   Símbolo:    {config.SYMBOL}")
     log.info(f"   Dirección:  {config.TRADE_DIRECTION}")
     log.info(f"   Capital:    {capital:.2f}")
@@ -71,18 +130,22 @@ def run_backtest(
     log.info(f"   R/R:        1:{config.RISK_REWARD}")
     log.info(f"   Rango:      {start_date} → {end_date}")
     log.info("=" * 65)
+    log.info("Obteniendo calendario de mercado...")
+
+    calendar = _fetch_calendar(broker.tc, start_date, end_date)
+    log.info(f"  {len(calendar)} días hábiles encontrados.")
+
+    dc = broker.dc
 
     for d in _date_range(start_date, end_date):
         if d.weekday() >= 5:
             continue
-
-        date_str = d.strftime("%Y-%m-%d")
-
-        try:
-            open_utc, close_utc = broker.get_market_hours(d)
-        except ValueError:
-            log.info(f"{date_str}: Mercado cerrado (día no hábil).")
+        if d not in calendar:
+            log.info(f"{d}: Mercado cerrado (día no hábil).")
             continue
+
+        open_utc, close_utc = calendar[d]
+        date_str = d.strftime("%Y-%m-%d")
 
         log.info(
             f"\n{'─'*55}\n"
@@ -91,11 +154,17 @@ def run_backtest(
             f"Cierre: {close_utc.strftime('%H:%M UTC')}"
         )
 
+        all_day_bars = _fetch_day_bars(dc, config.SYMBOL, open_utc, close_utc)
+        if not all_day_bars:
+            log.info(f"  Sin datos para {date_str}.")
+            continue
+
         state = BotState()
         state.reset_for_day(date_str, open_utc.isoformat(), close_utc.isoformat())
         state.status = S.CALC_RANGE
 
         broker.start_day(date_str)
+        broker.feed_bars(all_day_bars)
         strat = Strategy(broker, state)
 
         current_time = open_utc + timedelta(minutes=1)
@@ -105,10 +174,16 @@ def run_backtest(
             if state.status == S.DAY_ENDED:
                 break
 
-            bars = broker.get_closed_bars(config.SYMBOL, open_utc, current_time)
+            cutoff_ts = (current_time - timedelta(minutes=1)).replace(
+                second=0, microsecond=0
+            ).isoformat()
+            visible_bars = [b for b in all_day_bars if b.timestamp <= cutoff_ts]
 
-            if bars:
-                strat._process_bars(bars)
+            if visible_bars:
+                broker._all_bars         = visible_bars
+                broker._current_bar_idx  = len(visible_bars) - 1
+                broker._check_fills()
+                strat._process_bars(visible_bars)
 
             current_time += timedelta(minutes=1)
 
@@ -118,6 +193,9 @@ def run_backtest(
     return broker
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
         description="Backtesting de la estrategia de trading."
