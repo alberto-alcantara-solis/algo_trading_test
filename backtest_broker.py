@@ -113,7 +113,7 @@ class BacktestBroker:
         self._current_bar_idx = -1
         self._order       = None
         self._has_position = False
-        log.info(f"[BT] Sesión iniciada: {date_str} | Capital: {self._cash:.2f}")
+        ###log.info(f"[BT] Sesión iniciada: {date_str} | Capital: {self._cash:.2f}")
 
     def end_day(self):
         """Llama el motor al terminar cada sesión. Fuerza el cierre si hay posición."""
@@ -123,12 +123,12 @@ class BacktestBroker:
             self.day_results.append(self._current_day)
             pnl = self._current_day.pnl
             sign = "+" if pnl >= 0 else ""
-            log.info(
+            """###log.info(
                 f"[BT] Sesión terminada: {self._current_day.date} | "
                 f"Trades: {self._current_day.n_trades} | "
                 f"P&L: {sign}{pnl:.2f} | "
                 f"Capital: {self._cash:.2f}"
-            )
+            )"""
 
     def feed_bars(self, bars: List[Candle]):
         """Actualiza el buffer de velas de la sesión (llamado por get_closed_bars)."""
@@ -211,10 +211,10 @@ class BacktestBroker:
             tp        = tp,
             qty       = qty,
         )
-        log.info(
+        """###log.info(
             f"[BT LONG BRACKET] id={order_id[:8]} qty={qty} "
             f"entry={entry:.2f}  sl={sl:.2f}  tp={tp:.2f}"
-        )
+        )"""
         self._check_fills()
         return order_id
 
@@ -235,17 +235,17 @@ class BacktestBroker:
             tp        = tp,
             qty       = qty,
         )
-        log.info(
+        """###log.info(
             f"[BT SHORT BRACKET] id={order_id[:8]} qty={qty} "
             f"entry={entry:.2f}  sl={sl:.2f}  tp={tp:.2f}"
-        )
+        )"""
         self._check_fills()
         return order_id
 
     def cancel_order(self, order_id: str):
         if self._order and self._order.order_id == order_id:
             if not self._order.filled:
-                log.info(f"[BT] Orden {order_id[:8]} cancelada (sin ejecutar).")
+                ###log.info(f"[BT] Orden {order_id[:8]} cancelada (sin ejecutar).")
                 self._order = None
             else:
                 self._force_close("CANCELLED")
@@ -296,10 +296,10 @@ class BacktestBroker:
                 self._has_position = True
                 cost = o.fill_price * o.qty
                 self._cash -= cost
-                log.info(
+                """###log.info(
                     f"[BT] ✅ Fill [{o.direction}] {bar.timestamp[11:16]} "
                     f"@ {o.fill_price:.2f}  qty={o.qty}  coste={cost:.2f}"
-                )
+                )"""
             return
 
         if not o.filled or o.closed:
@@ -336,11 +336,11 @@ class BacktestBroker:
         self._cash += o.fill_price * o.qty + pnl
 
         sign = "+" if pnl >= 0 else ""
-        log.info(
+        """###log.info(
             f"[BT] {'✅' if pnl > 0 else '❌'} Cierre [{o.direction}] "
             f"{bar.timestamp[11:16]} @ {exit_price:.2f} ({reason}) "
             f"P&L: {sign}{pnl:.2f} | Capital: {self._cash:.2f}"
-        )
+        )"""
 
         if self._current_day:
             self._current_day.trades.append(
@@ -406,11 +406,27 @@ class BacktestBroker:
             total_wins   += dr.n_wins
 
         print("─" * 65)
-        wr   = (total_wins / total_trades * 100) if total_trades else 0
+        wr = (total_wins / total_trades * 100) if total_trades else 0
+        all_pnls = [
+            t.pnl
+            for dr in self.day_results
+            for t in dr.trades
+        ]
+        wins = [p for p in all_pnls if p > 0]
+        losses = [p for p in all_pnls if p < 0]
+        avg_win = sum(wins) / len(wins) if wins else 0
+        avg_loss = abs(sum(losses) / len(losses)) if losses else 0
+        p_win = len(wins) / len(all_pnls) if all_pnls else 0
+        p_loss = len(losses) / len(all_pnls) if all_pnls else 0
+        expectancy = (p_win * avg_win) - (p_loss * avg_loss)
         sign = "+" if total_pnl >= 0 else ""
         print(f"  Capital inicial:  {self.capital:.2f}")
         print(f"  Capital final:    {self._cash:.2f}")
         print(f"  P&L total:        {sign}{total_pnl:.2f}")
         print(f"  Total trades:     {total_trades}")
         print(f"  Win rate:         {wr:.1f}%")
+        print(f"  Avg win:          {avg_win:.2f}")
+        print(f"  Avg loss:         {avg_loss:.2f}")
+        print(f"  Expectancy:       {expectancy:+.2f} per trade")
+
         print("═" * 65 + "\n")
