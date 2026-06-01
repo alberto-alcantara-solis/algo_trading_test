@@ -13,7 +13,7 @@ TRADE_DIRECTION: str = "BOTH"   # "LONG" | "SHORT" | "BOTH"
 CAPITAL_PCT: float = 0.20
 
 OPENING_RANGE_BARS: int = 15
-EMA_LENGTH: int          = 50
+EMA_LENGTH: int          = 15
 EMA_SOURCE: str          = "close"
 RISK_REWARD: float       = 2.75
 

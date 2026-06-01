@@ -333,7 +333,7 @@ class Strategy:
 
         if s == S.WAIT_2ND_CONF:
             self._update_fvg_extremes(bar)
-            current_ema = ema(session_closes, config.EMA_LENGTH, self._ema_seed())
+            current_ema = ema(session_closes, 50, self._ema_seed())
 
             if self.st.direction == Dir.LONG:
                 if bar.close < self.st.bot_lim_fvg:
@@ -395,7 +395,7 @@ class Strategy:
                 return
 
             # ⚠️ Condición de seguridad crítica: cancelar si precio rompe el FVG o cruza el EMA
-            current_ema = ema(session_closes, config.EMA_LENGTH, self._ema_seed())
+            current_ema = ema(session_closes, 50, self._ema_seed())
             if self.st.direction == Dir.LONG:
                 should_cancel = bar.close < self.st.bot_lim_fvg or (current_ema is not None and bar.close < current_ema)
                 if should_cancel:
