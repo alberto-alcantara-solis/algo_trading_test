@@ -141,20 +141,20 @@ class Strategy:
 
         # Corte 1: Posición abierta → cerrar a mercado (21:55 h)
         if mins_left <= config.CUTOFF_MONITOR_MINS and self.st.status == S.MONITORING:
-            """###log.warning(
+            log.warning(
                 f"⏰ Corte {config.CUTOFF_MONITOR_MINS} min — "
                 f"Cerrando posición abierta a mercado."
-            )"""
+            )
             self.broker.close_position_at_market(config.SYMBOL)
             self._end_day()
             return
 
         # Corte 2: Orden lanzada sin ejecutar → cancelar (21:50 h)
         if mins_left <= config.CUTOFF_LAUNCHED_MINS and self.st.status == S.ORDER_LAUNCHED:
-            """###log.warning(
+            log.warning(
                 f"⏰ Corte {config.CUTOFF_LAUNCHED_MINS} min — "
                 f"Cancelando orden pendiente {self.st.order_id}."
-            )"""
+            )
             if self.st.order_id:
                 self.broker.cancel_order(self.st.order_id)
             self._end_day()
@@ -164,17 +164,17 @@ class Strategy:
         if mins_left <= config.CUTOFF_ANY_MINS and self.st.status not in (
             S.MONITORING, S.ORDER_LAUNCHED, S.DAY_ENDED, S.WAITING_OPEN
         ):
-            """###log.warning(
+            log.warning(
                 f"⏰ Corte {config.CUTOFF_ANY_MINS} min — "
                 f"Fin de sesión (estado: {self.st.status})."
-            )"""
+            )
             self._end_day()
 
     def _end_day(self):
         """Finaliza la sesión: limpia el FVG y pone el estado en DAY_ENDED."""
         self.st.reset_fvg()
         self.st.status = S.DAY_ENDED
-        ###log.info("Sesión terminada. Esperando al día siguiente.")
+        log.info("Sesión terminada. Esperando al día siguiente.")
 
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -197,10 +197,10 @@ class Strategy:
             to_process  = [b for b in all_bars if _dt(b.timestamp) >= replay_dt]
             self.st.replay_from_ts = None
             self.st.last_bar_ts    = None
-            """###log.info(
+            log.info(
                 f"🔄 Replay desde {replay_dt.strftime('%H:%M UTC')} "
                 f"({len(to_process)} velas)"
-            )"""
+            )
 
         # Modo normal
         else:
@@ -253,10 +253,10 @@ class Strategy:
                 self.st.top_lim = max(b["high"] for b in self.st.opening_bars)
                 self.st.bot_lim = min(b["low"]  for b in self.st.opening_bars)
                 self.st.status  = S.WAITING_BREAK
-                """###log.info(
+                log.info(
                     f"📐 Opening Range calculado: "
                     f"topLim={self.st.top_lim:.2f}  botLim={self.st.bot_lim:.2f}"
-                )"""
+                )
             return
 
         if s == S.WAITING_BREAK:
@@ -289,7 +289,7 @@ class Strategy:
                 bot_fvg = c3.high
 
             if not fvg_ok:
-                ###log.info(f"  ✗ No hay FVG [{self.st.direction}] → WAITING_BREAK")
+                log.info(f"  ✗ No hay FVG [{self.st.direction}] → WAITING_BREAK")
                 self.st.reset_fvg()
                 self.st.status = S.WAITING_BREAK
                 return
@@ -301,10 +301,10 @@ class Strategy:
             self.st.max_close_fvg = None
             self._update_fvg_extremes(c3)
             self.st.status = S.WAIT_1ST_CONF
-            """###log.info(
+            log.info(
                 f"  ✓ FVG [{self.st.direction}] → WAIT_1ST_CONF | "
                 f"topFVG={top_fvg:.2f}  botFVG={bot_fvg:.2f}"
-            )"""
+            )
             return
 
         if s == S.WAIT_1ST_CONF:
@@ -312,23 +312,23 @@ class Strategy:
 
             if self.st.direction == Dir.LONG:
                 if bar.close < self.st.bot_lim_fvg:
-                    ###log.info("  ✗ 1ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
+                    log.info("  ✗ 1ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
                 
                 if (bar.open > self.st.top_lim_fvg and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
                     self.st.status = S.WAIT_2ND_CONF
-                    ###log.info("  ✓ 1ª confirmación [LONG] → WAIT_2ND_CONF")
+                    log.info("  ✓ 1ª confirmación [LONG] → WAIT_2ND_CONF")
                 return
             else:
                 if bar.close > self.st.top_lim_fvg:
-                    ###log.info("  ✗ 1ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
+                    log.info("  ✗ 1ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
                 
                 if (bar.open < self.st.bot_lim_fvg and self.st.bot_lim_fvg < bar.close < self.st.top_lim_fvg):
                     self.st.status = S.WAIT_2ND_CONF
-                    ###log.info("  ✓ 1ª confirmación [SHORT] → WAIT_2ND_CONF")
+                    log.info("  ✓ 1ª confirmación [SHORT] → WAIT_2ND_CONF")
                 return
 
         if s == S.WAIT_2ND_CONF:
@@ -337,7 +337,7 @@ class Strategy:
 
             if self.st.direction == Dir.LONG:
                 if bar.close < self.st.bot_lim_fvg:
-                    ###log.info("  ✗ 2ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
+                    log.info("  ✗ 2ª conf: cierre bajo botFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
 
@@ -351,19 +351,19 @@ class Strategy:
 
                 if crosses_top_lim and ema_ok:
                     if not can_place_order:
-                        ###log.info("  ↩ 2ª conf LONG completa pero en replay → WAIT_1ST_CONF")
+                        log.info("  ↩ 2ª conf LONG completa pero en replay → WAIT_1ST_CONF")
                         self.st.status = S.WAIT_1ST_CONF
                     else:
-                        ###log.info("  ✓ 2ª conf LONG completa → ORDER LAUNCH")
+                        log.info("  ✓ 2ª conf LONG completa → ORDER LAUNCH")
                         self._launch_order(bar, current_ema)
                 else:
                     reason = "no cruza topLim" if not crosses_top_lim else "bajo EMA"
-                    ###log.info(f"  ↩ 2ª conf LONG parcial ({reason}) → WAIT_1ST_CONF")
+                    log.info(f"  ↩ 2ª conf LONG parcial ({reason}) → WAIT_1ST_CONF")
                     self.st.status = S.WAIT_1ST_CONF
                 return
             else:
                 if bar.close > self.st.top_lim_fvg:
-                    ###log.info("  ✗ 2ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
+                    log.info("  ✗ 2ª conf: cierre sobre topFVG → WAITING_BREAK (replay)")
                     self._cancel_to_break()
                     return
 
@@ -377,21 +377,21 @@ class Strategy:
 
                 if crosses_bot_lim and ema_ok:
                     if not can_place_order:
-                        ###log.info("  ↩ 2ª conf SHORT completa pero en replay → WAIT_1ST_CONF")
+                        log.info("  ↩ 2ª conf SHORT completa pero en replay → WAIT_1ST_CONF")
                         self.st.status = S.WAIT_1ST_CONF
                     else:
-                        ###log.info("  ✓ 2ª conf SHORT completa → ORDER LAUNCH")
+                        log.info("  ✓ 2ª conf SHORT completa → ORDER LAUNCH")
                         self._launch_order(bar, current_ema)
                 else:
                     reason = "no cruza botLim" if not crosses_bot_lim else "sobre EMA"
-                    ###log.info(f"  ↩ 2ª conf SHORT parcial ({reason}) → WAIT_1ST_CONF")
+                    log.info(f"  ↩ 2ª conf SHORT parcial ({reason}) → WAIT_1ST_CONF")
                     self.st.status = S.WAIT_1ST_CONF
                 return
 
         if s == S.ORDER_LAUNCHED:
             if self.broker.is_order_filled(self.st.order_id):
                 self.st.status = S.MONITORING
-                ###log.info(f"  ✅ Orden {self.st.order_id} ejecutada → MONITORING")
+                log.info(f"  ✅ Orden {self.st.order_id} ejecutada → MONITORING")
                 return
 
             # ⚠️ Condición de seguridad crítica: cancelar si precio rompe el FVG o cruza el EMA
@@ -406,17 +406,17 @@ class Strategy:
                     reason = "precio fuera del FVG" if (bar.close > self.st.top_lim_fvg) else "sobre EMA"
 
             if should_cancel:
-                """###log.warning(
+                log.warning(
                     f"  🚫 Condición de seguridad: cancelando orden {self.st.order_id} "
                     f"({reason}) → WAITING_BREAK (replay)"
-                )"""
+                )
                 self.broker.cancel_order(self.st.order_id)
                 self._cancel_to_break()
             return
 
         if s == S.MONITORING:
             if not self.broker.has_open_position(config.SYMBOL):
-                ###log.info("  ✅ Posición cerrada (TP o SL alcanzado) → WAITING_BREAK")
+                log.info("  ✅ Posición cerrada (TP o SL alcanzado) → WAITING_BREAK")
                 self.st.reset_fvg()
                 self.st.status = S.WAITING_BREAK
             return
@@ -467,10 +467,10 @@ class Strategy:
         self.st.c1        = c1.to_dict()
         self.st.c2        = c2.to_dict()
         self.st.status    = S.WAITING_FVG
-        """###log.info(
+        log.info(
             f"  🔴 Break [{direction}] → WAITING_FVG | "
             f"C2={c2.timestamp[11:16]} close={c2.close:.2f}"
-        )"""
+        )
 
     def _cancel_to_break(self):
         """
@@ -480,9 +480,9 @@ class Strategy:
         if self.st.c2:
             c2_dt = _dt(self.st.c2["timestamp"])
             self.st.replay_from_ts = (c2_dt + timedelta(minutes=1)).isoformat()
-            """###log.info(
+            log.info(
                 f"  🔄 Replay programado desde {self.st.replay_from_ts[11:16]}"
-            )"""
+            )
         self.st.reset_fvg()
         self.st.status = S.WAITING_BREAK
 
@@ -528,10 +528,10 @@ class Strategy:
             tp = round(entry + config.RISK_REWARD * (entry - sl), 2)
 
             if sl >= entry:
-                """###log.error(
+                log.error(
                     f"SL ({sl:.2f}) >= entry ({entry:.2f}) para LONG — "
                     f"orden descartada."
-                )"""
+                )
                 self._cancel_to_break()
                 return
 
@@ -544,10 +544,10 @@ class Strategy:
             tp = round(entry - config.RISK_REWARD * (sl - entry), 2)
 
             if sl <= entry:
-                """###log.error(
+                log.error(
                     f"SL ({sl:.2f}) <= entry ({entry:.2f}) para SHORT — "
                     f"orden descartada."
-                )"""
+                )
                 self._cancel_to_break()
                 return
 
@@ -559,8 +559,8 @@ class Strategy:
         self.st.order_id    = order_id
         self.st.status      = S.ORDER_LAUNCHED
 
-        """###log.info(
+        log.info(
             f"  🚀 Orden lanzada [{self.st.direction}] | "
             f"entry={entry:.2f}  sl={sl:.2f}  tp={tp:.2f}  "
             f"riesgo={entry - sl:.2f}  id={order_id}"
-        )"""
+        )
