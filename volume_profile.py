@@ -48,7 +48,7 @@ def _fetch_ticks(
     current_end = end_dt
     
     def dt_to_ib_str(dt: datetime) -> str:
-        return dt.strftime("%Y%m%d %H:%M:%S") + " UTC"
+        return dt.strftime("%Y%m%d %H:%M:%S") + " UTC+8"
     
     max_requests = 1000
     request_count = 0
@@ -74,7 +74,7 @@ def _fetch_ticks(
                 log.debug("No more ticks returned")
                 break
             
-            filtered_ticks = [t for t in ticks if start_dt <= _tick_dt(t) < end_dt]
+            filtered_ticks = [t for t in ticks if start_dt <= _tick_dt(t) <= end_dt]
             
             if filtered_ticks:
                 all_ticks.extend(filtered_ticks)

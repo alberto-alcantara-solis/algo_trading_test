@@ -78,7 +78,7 @@ class ForexBot:
 
         self.sm.load()
 
-        trade_date = datetime.now(REF_TZ)
+        trade_date = datetime.now(REF_TZ).date()
 
         if not is_trading_day():
             log.info("Today (%s) is not a trading day.  Bot will wait.", trade_date)
@@ -120,7 +120,6 @@ class ForexBot:
         Fetch closed 5-min bars since the last processed bar and return any that are NEW.
         """
         try:
-            now = time.now(REF_TZ)
             bars = self.ib.reqHistoricalData(
                 self.contract,
                 endDateTime    = "",
@@ -183,7 +182,7 @@ class ForexBot:
         """
         Check if the calendar day in REF_TZ has changed.  If so, rotate.
         """
-        trade_date = datetime.now(REF_TZ)
+        trade_date = datetime.now(REF_TZ).date()
         if not self.sm.is_same_day(trade_date):
             if is_trading_day():
                 log.info("Day rolled to %s — starting new strategy.", trade_date)
