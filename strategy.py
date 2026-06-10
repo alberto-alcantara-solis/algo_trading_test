@@ -19,12 +19,12 @@ based on the bar's timestamp versus the session boundaries.
 
 
 import logging
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from typing import Optional, Tuple
 
 from dataclasses import asdict
 
-from ib_insync import IB, Contract, Order, LimitOrder, MarketOrder
+from ib_insync import IB, Contract, Order
 
 from full_trading import Bar, FullTradingEngine
 from state_manager import OrderRecord, StateManager
@@ -97,8 +97,11 @@ class DailyStrategy:
             self.sb = compute_boundaries()
             self.sm.set_time_boundaries(asdict(self.sb))
 
+        trade_date = None
         if st.trade_date:
-            d = date.fromisoformat(st.trade_date)
+            trade_date = date.fromisoformat(st.trade_date)
+            self._set_datetime_anchors(self.sb, trade_date)
+        else:
             self._set_datetime_anchors(self.sb)
 
         if st.vp1:
@@ -111,6 +114,32 @@ class DailyStrategy:
         if st.asia_high is not None:
             self.asia_high = st.asia_high
             self.asia_low  = st.asia_low
+
+        if st.order1 and st.order1.get("ib_order_id"):
+            self._order1_ib_id = st.order1["ib_order_id"]
+            log.info("Restored order1 ID: %d", self._order1_ib_id)
+        if st.order2 and st.order2.get("ib_order_id"):
+            self._order2_ib_id = st.order2["ib_order_id"]
+            log.info("Restored order2 ID: %d", self._order2_ib_id)
+
+        if st.asia_bars:
+            self._asia_bars = [
+                Bar(
+                    open=b["open"],
+                    high=b["high"],
+                    low=b["low"],
+                    close=b["close"],
+                    volume=b["volume"],
+                    date=datetime.fromisoformat(b["date"]),
+                )
+                for b in st.asia_bars
+            ]
+            log.info("Restored %d Asia bars from state.", len(self._asia_bars))
+        
+        if phase in (PHASE_FULL_TRADING, PHASE_WAIT_ORDER2, PHASE_ORDER2_ACTIVE, PHASE_WAIT_SHUTOFF):
+            if not self._asia_bars or len(self._asia_bars) == 0:
+                log.info("Phase is %s but no Asia bars in state. Fetching historical bars...", phase)
+                self._fetch_historical_asia_bars()
 
         if phase in (PHASE_FULL_TRADING, PHASE_WAIT_ORDER2, PHASE_ORDER2_ACTIVE, PHASE_WAIT_SHUTOFF):
             self._create_full_trading_engine()
@@ -130,7 +159,7 @@ class DailyStrategy:
             return
 
         if self.asia_open_dt and self.asia_close_dt:
-            if self.asia_open_dt <= bar.date < self.asia_close_dt:
+            if self.asia_open_dt <= bar.date <= self.asia_close_dt:
                 self._asia_bars.append(bar)
 
         dispatch = {
@@ -195,6 +224,9 @@ class DailyStrategy:
             log.info("Order1 trigger candle closed at %s  close=%.5f  poc1=%.5f", bar.date, bar.close, self.poc1)
             self._place_order1(bar)
             self.sm.set_phase(PHASE_ORDER1_ACTIVE)
+        
+        if bar.date >= self.asia_close_dt:
+            self._handle_asia_close()
 
     def _ph_order1_active(self, bar: Bar) -> None:
         """
@@ -305,7 +337,20 @@ class DailyStrategy:
             self.asia_high = max(b.high for b in self._asia_bars)
             self.asia_low  = min(b.low  for b in self._asia_bars)
             self.sm.set_asia_range(self.asia_high, self.asia_low)
-            log.info("Asia range: high=%.5f  low=%.5f", self.asia_high, self.asia_low)
+            
+            bar_dicts = [
+                {
+                    "open": b.open,
+                    "high": b.high,
+                    "low": b.low,
+                    "close": b.close,
+                    "volume": b.volume,
+                    "date": b.date.isoformat(),
+                }
+                for b in self._asia_bars
+            ]
+            self.sm.set_asia_bars(bar_dicts)
+            log.info("Asia range: high=%.5f  low=%.5f  (saved %d bars)", self.asia_high, self.asia_low, len(self._asia_bars))
 
         self._create_full_trading_engine()
         self.sm.set_phase(PHASE_FULL_TRADING)
@@ -349,7 +394,7 @@ class DailyStrategy:
             if self.sm.state.trade_date:
                 trade_date = date.fromisoformat(self.sm.state.trade_date)
             else:
-                trade_date = date.today()
+                trade_date = datetime.now(REF_TZ).date()
             self.sm.reset_for_new_day(trade_date)
         except Exception as exc:
             log.error("Failed to reset persistent state: %s", exc)
@@ -401,19 +446,20 @@ class DailyStrategy:
 
         try:
             parent_trade  = self.ib.placeOrder(self.contract, parent)
-            real_entry_price = parent_trade.orderStatus.avgFillPrice if parent_trade.orderStatus.avgFillPrice > 0 else close
+            real_entry_price = close
             tp.parentId   = parent_trade.order.orderId
             self.ib.placeOrder(self.contract, tp)
             self._order1_ib_id = parent_trade.order.orderId
 
             rec = OrderRecord(
-                ib_order_id  = self._order1_ib_id,
-                direction    = direction,
-                entry_price  = real_entry_price,
-                tp_price     = poc,
-                sl_price     = 0.0,
-                is_open      = True,
-                has_sl       = False,
+                ib_order_id    = self._order1_ib_id,
+                direction      = direction,
+                entry_price    = real_entry_price,
+                tp_price       = poc,
+                sl_price       = 0.0,
+                total_quantity = TOTAL_CAPITAL * TRADE_QUANTITY,
+                is_open        = True,
+                has_sl         = False,
             )
             self.sm.record_order1(rec)
             log.info("Order1 placed: id=%d", self._order1_ib_id)
@@ -469,19 +515,20 @@ class DailyStrategy:
 
         try:
             parent_trade      = self.ib.placeOrder(self.contract, parent)
-            real_entry_price = parent_trade.orderStatus.avgFillPrice if parent_trade.orderStatus.avgFillPrice > 0 else close
+            real_entry_price = close
             tp_order.parentId = parent_trade.order.orderId
             self.ib.placeOrder(self.contract, tp_order)
             self._order2_ib_id = parent_trade.order.orderId
 
             rec = OrderRecord(
-                ib_order_id = self._order2_ib_id,
-                direction   = direction,
-                entry_price = real_entry_price,
-                tp_price    = tp,
-                sl_price    = 0.0,
-                is_open     = True,
-                has_sl      = False,
+                ib_order_id    = self._order2_ib_id,
+                direction      = direction,
+                entry_price    = real_entry_price,
+                tp_price       = tp,
+                sl_price       = 0.0,
+                total_quantity = TOTAL_CAPITAL * TRADE_QUANTITY,
+                is_open        = True,
+                has_sl         = False,
             )
             self.sm.record_order2(rec)
             log.info("Order2 placed: id=%d", self._order2_ib_id)
@@ -516,8 +563,17 @@ class DailyStrategy:
                 self.sm.set_phase(PHASE_WAIT_SHUTOFF)
                 return
 
+    def _get_order_record(self, parent_id: int) -> Optional[dict]:
+        for order_record in (self.sm.state.order1, self.sm.state.order2):
+            if order_record and order_record.get("ib_order_id") == parent_id:
+                return order_record
+        return None
+
     def _market_close_order(self, parent_id: int) -> None:
-        """Cancel the TP child and close the position at market."""
+        """Cancel bracket children and close the order's actual remaining filled quantity."""
+        order_record = self._get_order_record(parent_id)
+        total_qty = int(order_record.get("total_quantity", 0)) if order_record else 0
+
         for trade in self.ib.trades():
             if trade.order.parentId == parent_id:
                 try:
@@ -527,17 +583,24 @@ class DailyStrategy:
 
         for pos in self.ib.positions():
             if pos.contract.symbol == self.contract.symbol and abs(pos.position) > 0:
+                qty = abs(pos.position)
+                if total_qty > 0:
+                    qty = min(total_qty, qty)
+                if qty <= 0:
+                    continue
+
                 action = "SELL" if pos.position > 0 else "BUY"
                 flat = Order()
                 flat.action        = action
                 flat.orderType     = "MKT"
-                flat.totalQuantity = abs(pos.position)
+                flat.totalQuantity = qty
                 flat.transmit      = True
                 try:
                     self.ib.placeOrder(self.contract, flat)
-                    log.info("Market-close order placed (action=%s qty=%d)", action, abs(pos.position))
+                    log.info("Market-close order placed (action=%s qty=%d)", action, qty)
                 except Exception as exc:
                     log.error("Market close failed: %s", exc)
+                break
 
 
     # ====================================================================
@@ -569,11 +632,15 @@ class DailyStrategy:
         )
         log.info("FullTradingEngine created with levels: %s", levels)
 
-    def _set_datetime_anchors(self, sb: SessionBoundariesCandles) -> dict:
+    def _set_datetime_anchors(self, sb: SessionBoundariesCandles, trade_date: Optional[date] = None) -> None:
         """
-        Convert session boundary hour/minute tuples to actual datetime objects. Manages cross-day boundaries.
+        Convert session boundary hour/minute tuples to actual datetime objects relative to the trading day.
+        Uses REF_TZ for the reference date, and accepts the persisted trade_date when available.
         """
-        reference_date = REF_TZ.localize(datetime.combine(date.today(), datetime.min.time()))
+        if trade_date is None:
+            trade_date = datetime.now(REF_TZ).date()
+
+        reference_date = datetime.combine(trade_date, time.min, tzinfo=REF_TZ)
         control_offset = 0
         
         def _to_datetime(hour: int, minute: int, day_offset: int = 0) -> datetime:
@@ -625,6 +692,61 @@ class DailyStrategy:
         self.shutoff_dt = shut_off_dt
 
         return
+
+    def _fetch_historical_asia_bars(self) -> None:
+        """
+        Fetch all historical 5-min bars for the current Asia session (asia_open to asia_close).
+        """
+        if self.asia_open_dt is None or self.asia_close_dt is None:
+            log.warning("Cannot fetch Asia bars: session boundaries not set.")
+            return
+
+        log.info("Fetching historical Asia bars from %s to %s", self.asia_open_dt, self.asia_close_dt)
+        
+        try:
+            bars = self.ib.reqHistoricalData(
+                self.contract,
+                endDateTime=self.asia_close_dt,
+                durationStr="1 D",
+                barSizeSetting="5 mins",
+                whatToShow="TRADES",
+                useRTH=False,
+            )
+            
+            if not bars:
+                log.warning("No historical bars returned for Asia session.")
+                return
+            
+            asia_bars_filtered = []
+            for ib_bar in bars:
+                bar = Bar.from_ib(ib_bar)
+                if self.asia_open_dt <= bar.date <= self.asia_close_dt:
+                    asia_bars_filtered.append(bar)
+            
+            self._asia_bars = asia_bars_filtered
+            log.info("Recovered %d historical Asia bars.", len(self._asia_bars))
+            
+            if self._asia_bars:
+                bar_dicts = [
+                    {
+                        "open": b.open,
+                        "high": b.high,
+                        "low": b.low,
+                        "close": b.close,
+                        "volume": b.volume,
+                        "date": b.date.isoformat(),
+                    }
+                    for b in self._asia_bars
+                ]
+                self.sm.set_asia_bars(bar_dicts)
+                
+                self.asia_high = max(b.high for b in self._asia_bars)
+                self.asia_low = min(b.low for b in self._asia_bars)
+                self.sm.set_asia_range(self.asia_high, self.asia_low)
+                log.info("Recalculated Asia range: high=%.5f  low=%.5f", self.asia_high, self.asia_low)
+        
+        except Exception as exc:
+            log.error("Failed to fetch historical Asia bars: %s", exc)
 
 
 def _dict_to_sb(d: dict) -> SessionBoundariesCandles:

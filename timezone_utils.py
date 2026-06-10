@@ -33,7 +33,16 @@ def _session_in_ref(local_hour: int, local_tz: ZoneInfo, is_close: bool=False) -
     ref_offset   = _utc_offset_hours(REF_TZ)
     local_offset = _utc_offset_hours(local_tz)
     ref_hour = (local_hour + (ref_offset - local_offset)) % 24
-    return (ref_hour, 0) if not is_close else (ref_hour-1, 55)
+    return (ref_hour, 0) if not is_close else ((ref_hour - 1) % 24, 55)
+
+def _bar_dt(bar) -> datetime:
+    """
+    Convert IB bar datetime to REF_TZ-aware datetime (UTC+8). Assumes IB bar.date is UTC if naive.
+    """
+    dt = bar.date
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+    return dt.astimezone(REF_TZ)
 
 @dataclass
 class SessionBoundariesCandles:
@@ -79,7 +88,7 @@ def compute_boundaries() -> SessionBoundariesCandles:
     bar_open_min = (mid_london_asia_minutes // 5) * 5
     sb.mid_london_asia_open = (((bar_open_min // 60) % 24), (bar_open_min % 60))
 
-    mid_lc_so_minutes = _mid_minutes(sb.london_close[0], sb.shut_off[0])
+    mid_lc_so_minutes = _mid_minutes(sb.london_close[0], sb.shut_off[0]+1)
     bar_open_min2 = (mid_lc_so_minutes // 5) * 5
     sb.mid_london_close_shutoff_open = (((bar_open_min2 // 60) % 24), (bar_open_min2 % 60))
 

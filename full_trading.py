@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from ib_insync import IB, Contract, Order, Trade
 
+from timezone_utils import _bar_dt
 from config import *
 
 
@@ -51,7 +52,6 @@ class Bar:
 
     @staticmethod
     def from_ib(b) -> "Bar":
-        from timezone_utils import _bar_dt
         return Bar(
             open=float(b.open),
             high=float(b.high),
@@ -106,6 +106,7 @@ class Slot:
         direction: str,
         broke_levels: list[float],
         state_mgr,
+        skip_initial_save: bool = False,
     ):
         Slot._id_counter += 1
         self.slot_id     = Slot._id_counter
@@ -128,7 +129,6 @@ class Slot:
         self.entry_price:  float = 0.0
         self.sl_price:     float = 0.0
         self.tp_price:     float = 0.0
-        self.bars_since_launch = 0
 
         self._state_mgr = state_mgr
         self._trade:  Optional[Trade] = None
@@ -137,7 +137,8 @@ class Slot:
             "[Slot %d] Created — direction=%s  levels=%s  C1=[%.5f,%.5f]  C2=%.5f",
             self.slot_id, direction, broke_levels, c1.low, c1.high, c2.close,
         )
-        self._save()
+        if not skip_initial_save:
+            self._save()
 
     def on_bar(self, bar: Bar, ema: Optional[float], ib: IB, contract: Contract) -> bool:
         """
@@ -312,7 +313,7 @@ class Slot:
 
             self.ib_order_id = parent_trade.order.orderId
             self._trade      = parent_trade
-            self.entry_price = parent_trade.orderStatus.avgFillPrice if parent_trade.orderStatus.avgFillPrice > 0 else entry
+            self.entry_price = entry
             self.sl_price    = sl
             self.tp_price    = tp
 
@@ -325,7 +326,6 @@ class Slot:
             return self._discard()
 
         self.stage = Stage.ORDER_LAUNCHED
-        self.bars_since_launch = 0
         self._save()
         return True
 
@@ -333,41 +333,56 @@ class Slot:
         """
         Order launched, waiting for fill
         """
-        self.bars_since_launch += 1
 
-        if self._trade and self._trade.orderStatus.status in ("Filled", "PreSubmitted"):
+        if self._trade and self._trade.orderStatus.status == "Filled":
             log.info("[Slot %d] Order filled — entering MONITORING.", self.slot_id)
             self.stage = Stage.MONITORING
             self._save()
             return True
+        
+        if self.direction == "long":
+            if bar.close < self.bot_fvg or (ema is not None and bar.close < ema):
+                log.info("[Slot %d] Long: close below bot_fvg/EMA while waiting for order fill — discard.", self.slot_id)
+                self._cancel_orders(ib)
+                return self._discard()
+        else:
+            if bar.close > self.top_fvg or (ema is not None and bar.close > ema):
+                log.info("[Slot %d] Short: close above top_fvg/EMA while waiting for order fill — discard.", self.slot_id)
+                self._cancel_orders(ib)
+                return self._discard()
 
         return True
 
     def _stage_monitoring(self, ib: IB) -> bool:
         """
-        Monitoring open position
+        Monitoring open position.
         """
+        if self._trade is None and self.ib_order_id > 0:
+            for t in ib.trades():
+                if t.order.orderId == self.ib_order_id:
+                    self._trade = t
+                    log.info("[Slot %d] Recovered Trade object from IB (order_id=%d)", 
+                             self.slot_id, self.ib_order_id)
+                    break
+        
         if self._trade is None:
-            return self._discard()
+            if self.ib_order_id > 0:
+                for t in ib.trades():
+                    if t.order.parentId == self.ib_order_id:
+                        return True
+                
+                log.info("[Slot %d] No Trade or child orders found for order_id=%d — discarding.", self.slot_id, self.ib_order_id)
+                return self._discard()
+            else:
+                return self._discard()
 
         status = self._trade.orderStatus.status
         if status in ("Inactive", "Cancelled", "ApiCancelled"):
             log.info("[Slot %d] Position closed (status=%s) — freeing slot.", self.slot_id, status)
             return self._discard()
 
-        # Check if parent is fully done (TP or SL triggered closes child orders)
-        positions = {p.contract.conId: p for p in ib.positions()}
-
-        # If no remaining position for this contract, the trade resolved
-        open_pos = any(
-            abs(p.position) > 0
-            for p in ib.positions()
-            if p.contract.symbol == self._trade.contract.symbol
-        )
-
-        # Simple check: if the TP/SL child orders are inactive, position closed
-        trades = ib.trades()
-        for t in trades:
+        # Check if TP/SL child orders have filled (position closed)
+        for t in ib.trades():
             if t.order.parentId == self.ib_order_id:
                 if t.orderStatus.status in ("Filled",):
                     log.info("[Slot %d] Child order filled — position closed.", self.slot_id)
@@ -379,30 +394,73 @@ class Slot:
         """
         Called at shut_off or end_time
         """
-        if self.stage in (Stage.ORDER_LAUNCHED,):
-            self._cancel_orders(ib)
-        elif self.stage == Stage.MONITORING:
+        self._cancel_orders(ib)
+        if self._position_quantity(ib) > 0:
             self._close_at_market(ib, contract)
         self._discard()
 
     def _cancel_orders(self, ib: IB) -> None:
-        if self._trade:
-            try:
-                ib.cancelOrder(self._trade.order)
-                log.info("[Slot %d] Order cancelled.", self.slot_id)
-            except Exception as exc:
-                log.error("[Slot %d] Cancel failed: %s", self.slot_id, exc)
+        if not self._trade:
+            return
+
+        try:
+            ib.cancelOrder(self._trade.order)
+            log.info("[Slot %d] Parent order cancelled.", self.slot_id)
+        except Exception as exc:
+            log.error("[Slot %d] Parent cancel failed: %s", self.slot_id, exc)
+
+        for trade in ib.trades():
+            if trade.order.parentId == self.ib_order_id:
+                try:
+                    ib.cancelOrder(trade.order)
+                    log.info("[Slot %d] Child order cancelled: %s", self.slot_id, trade.order.orderId)
+                except Exception as exc:
+                    log.error("[Slot %d] Child cancel failed: %s", self.slot_id, exc)
+
+    def _position(self, ib: IB):
+        if self._trade is None:
+            return None
+
+        trade_conid = getattr(self._trade.contract, "conId", None)
+        for pos in ib.positions():
+            if trade_conid is not None and getattr(pos.contract, "conId", None) == trade_conid:
+                return pos
+            if self._trade.contract and pos.contract.symbol == self._trade.contract.symbol:
+                return pos
+        return None
+
+    def _position_quantity(self, ib: IB) -> int:
+        pos = self._position(ib)
+        if pos is not None and abs(pos.position) > 0:
+            return int(abs(pos.position))
+
+        if self._trade is not None:
+            filled = getattr(self._trade.orderStatus, "filled", 0)
+            if filled:
+                return int(abs(filled))
+
+        return 0
 
     def _close_at_market(self, ib: IB, contract: Contract) -> None:
-        action = "SELL" if self.direction == "long" else "BUY"
+        qty = self._position_quantity(ib)
+        if qty <= 0:
+            log.info("[Slot %d] No open position to close.", self.slot_id)
+            return
+
+        pos = self._position(ib)
+        if pos is not None:
+            action = "SELL" if pos.position > 0 else "BUY"
+        else:
+            action = "SELL" if self.direction == "long" else "BUY"
+
         close_order = Order()
         close_order.action        = action
         close_order.orderType     = "MKT"
-        close_order.totalQuantity = TOTAL_CAPITAL * TRADE_QUANTITY
+        close_order.totalQuantity = qty
         close_order.transmit      = True
         try:
             ib.placeOrder(contract, close_order)
-            log.info("[Slot %d] Market close order placed.", self.slot_id)
+            log.info("[Slot %d] Market close order placed (qty=%d).", self.slot_id, qty)
         except Exception as exc:
             log.error("[Slot %d] Market close failed: %s", self.slot_id, exc)
 
@@ -452,7 +510,6 @@ class Slot:
             "entry_price":   self.entry_price,
             "sl_price":      self.sl_price,
             "tp_price":      self.tp_price,
-            "bars_since_launch": self.bars_since_launch,
         }
         self._state_mgr.upsert_slot(d)
 
@@ -576,8 +633,11 @@ class FullTradingEngine:
 
     def restore_slots(self, slot_dicts: list[dict]) -> None:
         """
-        Restore slots from persisted state (used after crash recovery)
+        Restore slots from persisted state (used after crash recovery).
         """
+        if not slot_dicts:
+            return
+        
         for sd in slot_dicts:
             try:
                 c1 = Bar(open=0, high=sd["c1_high"], low=sd["c1_low"],
@@ -586,7 +646,9 @@ class FullTradingEngine:
                 c2 = Bar(open=sd["c2_open"], high=0, low=0,
                          close=sd["c2_close"], volume=0,
                          date=datetime.fromisoformat(sd["c2_bar_dt"]))
-                slot = Slot(c1, c2, sd["direction"], sd["broke_levels"], self.state_mgr)
+                
+                slot = Slot(c1, c2, sd["direction"], sd["broke_levels"], self.state_mgr, skip_initial_save=True)
+                
                 slot.slot_id   = sd["slot_id"]
                 slot.stage     = sd["stage"]
                 slot.bot_fvg   = sd["bot_fvg"]
@@ -599,8 +661,16 @@ class FullTradingEngine:
                 slot.entry_price      = sd.get("entry_price", 0.0)
                 slot.sl_price         = sd.get("sl_price", 0.0)
                 slot.tp_price         = sd.get("tp_price", 0.0)
-                slot.bars_since_launch= sd.get("bars_since_launch", 0)
                 self._slots.append(slot)
                 log.info("Restored slot %d at stage %s", slot.slot_id, slot.stage)
             except Exception as exc:
                 log.error("Failed to restore slot %s: %s", sd, exc)
+        
+        if self._slots:
+            max_slot_id = max(s.slot_id for s in self._slots)
+            Slot._id_counter = max_slot_id
+            log.info("Reset Slot._id_counter to %d (max restored slot_id + 1)", Slot._id_counter)
+        
+        for slot in self._slots:
+            slot._save()
+            log.info("Re-saved restored slot %d to state manager", slot.slot_id)

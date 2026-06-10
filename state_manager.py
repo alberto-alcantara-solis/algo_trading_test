@@ -28,12 +28,23 @@ class VPState:
     val: Optional[float] = None
 
 @dataclass
+class BarRecord:
+    """Persistent representation of a trading bar."""
+    open:   float  = 0.0
+    high:   float  = 0.0
+    low:    float  = 0.0
+    close:  float  = 0.0
+    volume: float  = 0.0
+    date:   str    = ""
+
+@dataclass
 class OrderRecord:
     ib_order_id:   int     = 0
     direction:     str     = ""      # "long" | "short"
     entry_price:   float   = 0.0
     tp_price:      float   = 0.0
     sl_price:      float   = 0.0
+    total_quantity: int   = 0
     is_open:       bool    = True
     has_sl:        bool    = True
     closed_reason: str     = ""      # "tp" | "sl" | "market" | "cancel"
@@ -64,7 +75,6 @@ class SlotState:
     entry_price:   float = 0.0
     sl_price:      float = 0.0
     tp_price:      float = 0.0
-    bars_since_launch: int = 0
 
 @dataclass
 class DayState:
@@ -91,6 +101,8 @@ class DayState:
 
     asia_high: Optional[float] = None
     asia_low:  Optional[float] = None
+
+    asia_bars: list = field(default_factory=list)  # List of BarRecord dicts
 
     slots: list = field(default_factory=list)
 
@@ -210,6 +222,20 @@ class StateManager:
     def set_time_boundaries(self, time_bboundaries_dict: dict) -> None:
         self._state.time_boundaries = time_bboundaries_dict
         self.save()
+
+    def set_asia_bars(self, bars: list) -> None:
+        """
+        Persist a list of bars (as dicts) from the Asia session.
+        
+        Args:
+            bars: List of dicts with keys: open, high, low, close, volume, date
+        """
+        self._state.asia_bars = bars
+        self.save()
+
+    def get_asia_bars(self) -> list:
+        """Retrieve persisted Asia bars from state."""
+        return self._state.asia_bars or []
 
 
 # ---------------------------------------------------------------------------
