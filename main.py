@@ -3,9 +3,13 @@ main.py — Entry point for the Forex Trading Bot.
 
 Responsibilities:
   1. Connect to IB (Gateway).
-  2. Subscribe to 5-min real-time bars for the configured instrument.
-  3. On each closed bar, route it to the active DailyStrategy.
-  4. At the end of the dayly shutoff boundaries rotate to a new DailyStrategy.
+  2. Poll closed 5-min bars and route them to the active DailyStrategy.
+  3. Manage the trading-day lifecycle.  A trading "day" runs from Asia open
+     (~08:00 UTC+8) to shut-off (~03:00 UTC+8 the NEXT calendar day), so it
+     crosses midnight: the day only rolls once the previous session reached
+     DONE.  Friday's session legitimately finishes on Saturday morning, and
+     weekends simply wait for Monday.
+  4. Wall-clock safety net: force the shut-off if bars stall past the boundary.
   5. Handle graceful shutdown (Ctrl-C, SIGTERM).
   6. On startup, detect if we're mid-strategy and resume via bootstrap().
 """
@@ -15,7 +19,7 @@ import asyncio
 import logging
 import signal
 import sys
-from datetime import datetime, date, time
+from datetime import datetime, date, timedelta
 from typing import Optional
 
 from ib_insync import IB, Forex
@@ -23,7 +27,7 @@ from ib_insync import IB, Forex
 from config import *
 from full_trading import Bar
 from state_manager import StateManager
-from strategy import DailyStrategy, PHASE_DONE
+from strategy import DailyStrategy, PHASE_DONE, PHASE_WAIT_ASIA_OPEN
 from timezone_utils import is_trading_day
 
 
@@ -59,8 +63,6 @@ class ForexBot:
         self.strategy: Optional[DailyStrategy] = None
 
         self._last_bar_dt: Optional[datetime] = None
-
-        self._poll_task: Optional[asyncio.Task] = None
         self._running = True
 
     def start(self) -> None:
@@ -77,13 +79,7 @@ class ForexBot:
         log.info("Contract qualified: %s", self.contract)
 
         self.sm.load()
-
-        trade_date = datetime.now(REF_TZ).date()
-
-        if not is_trading_day():
-            log.info("Today (%s) is not a trading day.  Bot will wait.", trade_date)
-        else:
-            self._init_or_resume_strategy(trade_date)
+        self._ensure_strategy()
 
         signal.signal(signal.SIGINT,  self._shutdown_signal)
         signal.signal(signal.SIGTERM, self._shutdown_signal)
@@ -99,15 +95,12 @@ class ForexBot:
             try:
                 await asyncio.sleep(30)
 
-                if not is_trading_day():
-                    await self._maybe_roll_day()
-                    continue
+                self._ensure_strategy()
+                self._safety_shutoff()
 
-                await self._maybe_roll_day()
-
-                new_bars = self._fetch_new_bars()
-                for bar in new_bars:
-                    if self.strategy:
+                if self.strategy:
+                    new_bars = self._fetch_new_bars()
+                    for bar in new_bars:
                         self.strategy.on_bar(bar)
 
             except Exception as exc:
@@ -160,41 +153,70 @@ class ForexBot:
     # ------------------------------------------------------------------
     # Strategy lifecycle
     # ------------------------------------------------------------------
-    def _init_or_resume_strategy(self, trade_date: date) -> None:
-        """
-        If state is for today → resume from current phase.
-        Otherwise → reset and start fresh.
-        """
-        if self.sm.is_same_day(trade_date):
-            log.info("Resuming strategy for %s at phase=%s",
-                     trade_date, self.sm.state.phase)
-            if self.sm.state.phase == PHASE_DONE:
-                log.info("Today's strategy is already DONE.  Waiting for next day.")
-                return
-        else:
-            log.info("New trading day %s — resetting state.", trade_date)
-            self.sm.reset_for_new_day(trade_date)
-
+    def _new_strategy(self) -> None:
         self.strategy = DailyStrategy(self.ib, self.contract, self.sm)
         self.strategy.bootstrap()
 
-    async def _maybe_roll_day(self) -> None:
+    def _ensure_strategy(self) -> None:
         """
-        Check if the calendar day in REF_TZ has changed.  If so, rotate.
+        Create / resume / roll the DailyStrategy according to the day model.
         """
-        trade_date = datetime.now(REF_TZ).date()
-        if not self.sm.is_same_day(trade_date):
-            if is_trading_day():
-                log.info("Day rolled to %s — starting new strategy.", trade_date)
-                if self.strategy and self.sm.state.phase != PHASE_DONE:
-                    log.warning("Previous day strategy was not DONE — forcing close.")
-                    if self.strategy._ft_engine:
-                        self.strategy._ft_engine.close_all_market()
-                self._init_or_resume_strategy(trade_date)
-            else:
-                log.info("Day rolled to %s — not a trading day.", trade_date)
-                self.sm.reset_for_new_day(trade_date)
-                self.strategy = None
+        today = datetime.now(REF_TZ).date()
+        st = self.sm.state
+
+        if st.trade_date == today.isoformat():
+            if self.strategy is None:
+                log.info("Resuming strategy for %s at phase=%s", today, st.phase)
+                self._new_strategy()
+            return
+
+        mid_session = bool(st.trade_date) and st.phase not in (PHASE_DONE, PHASE_WAIT_ASIA_OPEN)
+        if mid_session:
+            try:
+                stored = date.fromisoformat(st.trade_date)
+            except ValueError:
+                stored = None
+
+            if stored and (today - stored).days <= 1:
+                if self.strategy is None:
+                    log.info("Resuming overnight session of %s (phase=%s).",
+                             st.trade_date, st.phase)
+                    self._new_strategy()
+                return
+
+            log.warning("State is %s (phase=%s) but today is %s — force-closing stale session.",
+                        st.trade_date, st.phase, today)
+            if self.strategy is None:
+                self._new_strategy()
+            try:
+                self.strategy._handle_shutoff()
+            except Exception as exc:
+                log.error("Stale-session shut-off failed: %s", exc, exc_info=True)
+
+        if is_trading_day(datetime.now(REF_TZ)):
+            log.info("Rolling to new trading day %s.", today)
+            self.sm.reset_for_new_day(today)
+            self._new_strategy()
+        else:
+            log.info("Day rolled to %s — not a trading day, waiting.", today)
+            self.sm.reset_for_new_day(today)
+            self.strategy = None
+
+    def _safety_shutoff(self) -> None:
+        """
+        Wall-clock safety net: if bars stall and the session runs past its shut-off boundary, force the shut-off anyway.
+        """
+        if not self.strategy:
+            return
+        if self.sm.state.phase in (PHASE_DONE, PHASE_WAIT_ASIA_OPEN):
+            return
+        so = self.strategy.shutoff_dt
+        if so and datetime.now(REF_TZ) >= so + timedelta(minutes=10):
+            log.warning("Wall-clock is past shut-off (%s) and the session is still open — forcing shut-off.", so)
+            try:
+                self.strategy._handle_shutoff()
+            except Exception as exc:
+                log.error("Safety shut-off failed: %s", exc, exc_info=True)
 
 
     # ------------------------------------------------------------------
