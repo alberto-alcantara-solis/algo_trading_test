@@ -88,7 +88,7 @@ def compute_boundaries() -> SessionBoundariesCandles:
     bar_open_min = (mid_london_asia_minutes // 5) * 5
     sb.mid_london_asia_open = (((bar_open_min // 60) % 24), (bar_open_min % 60))
 
-    mid_lc_so_minutes = _mid_minutes(sb.london_close[0], sb.shut_off[0]+1)
+    mid_lc_so_minutes = _mid_minutes(sb.london_close[0]+1, sb.shut_off[0]+1)
     bar_open_min2 = (mid_lc_so_minutes // 5) * 5
     sb.mid_london_close_shutoff_open = (((bar_open_min2 // 60) % 24), (bar_open_min2 % 60))
 

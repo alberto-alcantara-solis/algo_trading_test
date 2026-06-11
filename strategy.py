@@ -26,12 +26,13 @@ from dataclasses import asdict
 
 from ib_insync import IB, Contract, Order
 
-from full_trading import Bar, FullTradingEngine
+from full_trading import Bar, EMATracker, FullTradingEngine
 from state_manager import OrderRecord, StateManager
 from timezone_utils import SessionBoundariesCandles
 
 from timezone_utils import compute_boundaries
 from volume_profile import compute_volume_profile
+from sizing import compute_order_quantity
 
 from config import *
 
@@ -73,6 +74,9 @@ class DailyStrategy:
         self.shutoff_dt:      Optional[datetime] = None
 
         self._ft_engine: Optional[FullTradingEngine] = None
+
+        self._ema_trend = EMATracker(EMA_TREND)
+        self._trend_last_dt: Optional[datetime] = None
 
         self._order1_ib_id: int = 0
         self._order2_ib_id: int = 0
@@ -137,9 +141,26 @@ class DailyStrategy:
             log.info("Restored %d Asia bars from state.", len(self._asia_bars))
         
         if phase in (PHASE_FULL_TRADING, PHASE_WAIT_ORDER2, PHASE_ORDER2_ACTIVE, PHASE_WAIT_SHUTOFF):
-            if not self._asia_bars or len(self._asia_bars) == 0:
+            if not self._asia_bars:
                 log.info("Phase is %s but no Asia bars in state. Fetching historical bars...", phase)
-                self._fetch_historical_asia_bars()
+                fetched = self._fetch_historical_asia_bars()
+                if fetched:
+                    self._asia_bars = fetched
+                    self.sm.set_asia_bars(_bars_to_dicts(fetched))
+                    if self.asia_high is None:
+                        self.asia_high = max(b.high for b in fetched)
+                        self.asia_low  = min(b.low  for b in fetched)
+                        self.sm.set_asia_range(self.asia_high, self.asia_low)
+                        log.info("Recalculated Asia range: high=%.5f  low=%.5f",
+                                 self.asia_high, self.asia_low)
+
+        warm = self._fetch_recent_bars()
+        for b in warm:
+            self._ema_trend.update(b.close)
+            self._trend_last_dt = b.date
+        if warm:
+            log.info("EMA_TREND warmed with %d bars (value=%.5f, ready=%s)",
+                     len(warm), self._ema_trend.value, self._ema_trend.ready)
 
         if phase in (PHASE_FULL_TRADING, PHASE_WAIT_ORDER2, PHASE_ORDER2_ACTIVE, PHASE_WAIT_SHUTOFF):
             self._create_full_trading_engine()
@@ -161,6 +182,10 @@ class DailyStrategy:
         if self.asia_open_dt and self.asia_close_dt:
             if self.asia_open_dt <= bar.date <= self.asia_close_dt:
                 self._asia_bars.append(bar)
+
+        if self._trend_last_dt is None or bar.date > self._trend_last_dt:
+            self._ema_trend.update(bar.close)
+            self._trend_last_dt = bar.date
 
         dispatch = {
             PHASE_WAIT_ASIA_OPEN:   self._ph_wait_asia_open,
@@ -221,12 +246,15 @@ class DailyStrategy:
 
         bar_open = bar.date
         if (bar_open.hour == self.sb.mid_london_asia_open[0] and bar_open.minute == self.sb.mid_london_asia_open[1] and self.poc1 is not None):
-            log.info("Order1 trigger candle closed at %s  close=%.5f  poc1=%.5f", bar.date, bar.close, self.poc1)
-            self._place_order1(bar)
+            if self._bar_is_fresh(bar):
+                log.info("Order1 trigger candle closed at %s  close=%.5f  poc1=%.5f", bar.date, bar.close, self.poc1)
+                self._place_order1(bar)
+            else:
+                log.warning("Order1 trigger candle %s is stale (replayed after a restart) — skipping order1 today.", bar.date)
             self.sm.set_phase(PHASE_ORDER1_ACTIVE)
         
         if bar.date >= self.asia_close_dt:
-            self._handle_asia_close()
+            self._handle_asia_close(bar)
 
     def _ph_order1_active(self, bar: Bar) -> None:
         """
@@ -259,7 +287,7 @@ class DailyStrategy:
             vp3 = compute_volume_profile(
                 self.ib, self.contract,
                 start_dt=self.london_open_dt,
-                end_dt=self.london_close_dt,
+                end_dt=self.london_close_dt + timedelta(minutes=5),
                 label="VP3",
             )
             if vp3:
@@ -280,8 +308,11 @@ class DailyStrategy:
 
         bar_open = bar.date
         if (bar_open.hour == self.sb.mid_london_close_shutoff_open[0] and bar_open.minute == self.sb.mid_london_close_shutoff_open[1] and self.poc2 is not None and self.poc3 is not None):
-            log.info("Order2 trigger candle closed at %s  close=%.5f", bar.date, bar.close)
-            self._place_order2(bar)
+            if self._bar_is_fresh(bar):
+                log.info("Order2 trigger candle closed at %s  close=%.5f", bar.date, bar.close)
+                self._place_order2(bar)
+            else:
+                log.warning("Order2 trigger candle %s is stale (replayed after a restart) — skipping order2 today.", bar.date)
             self.sm.set_phase(PHASE_ORDER2_ACTIVE)
 
         if bar.date >= self.shutoff_dt:
@@ -326,30 +357,23 @@ class DailyStrategy:
         vp2 = compute_volume_profile(
             self.ib, self.contract,
             start_dt=self.asia_open_dt,
-            end_dt=self.asia_close_dt,
+            end_dt=self.asia_close_dt + timedelta(minutes=5),
             label="VP2",
         )
         if vp2:
             self.vah2, self.poc2, self.val2 = vp2.vah, vp2.poc, vp2.val
             self.sm.set_vp(2, vp2.vah, vp2.poc, vp2.val)
 
+        fetched = self._fetch_historical_asia_bars()
+        if fetched:
+            self._asia_bars = fetched
+
         if self._asia_bars:
             self.asia_high = max(b.high for b in self._asia_bars)
             self.asia_low  = min(b.low  for b in self._asia_bars)
             self.sm.set_asia_range(self.asia_high, self.asia_low)
-            
-            bar_dicts = [
-                {
-                    "open": b.open,
-                    "high": b.high,
-                    "low": b.low,
-                    "close": b.close,
-                    "volume": b.volume,
-                    "date": b.date.isoformat(),
-                }
-                for b in self._asia_bars
-            ]
-            self.sm.set_asia_bars(bar_dicts)
+
+            self.sm.set_asia_bars(_bars_to_dicts(self._asia_bars))
             log.info("Asia range: high=%.5f  low=%.5f  (saved %d bars)", self.asia_high, self.asia_low, len(self._asia_bars))
 
         self._create_full_trading_engine()
@@ -391,10 +415,7 @@ class DailyStrategy:
         self._asia_bars = []
 
         try:
-            if self.sm.state.trade_date:
-                trade_date = date.fromisoformat(self.sm.state.trade_date)
-            else:
-                trade_date = datetime.now(REF_TZ).date()
+            trade_date = datetime.now(REF_TZ).date()
             self.sm.reset_for_new_day(trade_date)
         except Exception as exc:
             log.error("Failed to reset persistent state: %s", exc)
@@ -429,19 +450,35 @@ class DailyStrategy:
             direction = "long"
             action    = "BUY"
 
-        log.info("Order1: %s  entry=%.5f  TP=%.5f", direction, close, poc)
+        trend = self._ema_trend.value
+        if trend is None:
+            log.warning("Order1: EMA_TREND not ready — skipping order1.")
+            return
+        if direction == "long" and not (close > trend):
+            log.info("Order1: long blocked by EMA_TREND (close=%.5f <= ema=%.5f).", close, trend)
+            return
+        if direction == "short" and not (close < trend):
+            log.info("Order1: short blocked by EMA_TREND (close=%.5f >= ema=%.5f).", close, trend)
+            return
+
+        qty = compute_order_quantity(self.ib, self.contract)
+        if qty <= 0:
+            log.error("Order1: sizing returned 0 — skipping.")
+            return
+
+        log.info("Order1: %s  entry=%.5f  TP=%.5f  qty=%d", direction, close, poc, qty)
 
         parent = Order()
         parent.action        = action
         parent.orderType     = "MKT"
-        parent.totalQuantity = TOTAL_CAPITAL*TRADE_QUANTITY
+        parent.totalQuantity = qty
         parent.transmit      = False
 
         tp = Order()
         tp.action        = "SELL" if action == "BUY" else "BUY"
         tp.orderType     = "LMT"
         tp.lmtPrice      = round(poc, 5)
-        tp.totalQuantity = TOTAL_CAPITAL*TRADE_QUANTITY
+        tp.totalQuantity = qty
         tp.transmit      = True
 
         try:
@@ -457,7 +494,7 @@ class DailyStrategy:
                 entry_price    = real_entry_price,
                 tp_price       = poc,
                 sl_price       = 0.0,
-                total_quantity = TOTAL_CAPITAL * TRADE_QUANTITY,
+                total_quantity = qty,
                 is_open        = True,
                 has_sl         = False,
             )
@@ -480,37 +517,49 @@ class DailyStrategy:
             log.error("Order2: poc2 or poc3 is None — skipping.")
             return
 
-        if poc3 is not None:
-            poc2_below = poc2 < close
-            poc3_below = poc3 < close
-            if poc2_below and poc3_below:
-                direction = "short"
-                tp = max(poc2, poc3)
-            elif (not poc2_below) and (not poc3_below):
-                direction = "long"
-                tp = min(poc2, poc3)
-            else:
-                direction = "short" if poc2_below else "long"
-                tp = poc2
+        poc2_below = poc2 < close
+        poc3_below = poc3 < close
+        if poc2_below and poc3_below:
+            direction = "short"
+            tp = max(poc2, poc3)
+        elif (not poc2_below) and (not poc3_below):
+            direction = "long"
+            tp = min(poc2, poc3)
         else:
-            log.error("Order2: poc3 is None — cannot determine direction, skipping.")
-            return
+            direction = "short" if poc2_below else "long"
+            tp = poc2
 
         action = "SELL" if direction == "short" else "BUY"
 
-        log.info("Order2: %s  entry=%.5f  TP=%.5f", direction, close, tp)
+        trend = self._ema_trend.value
+        if trend is None:
+            log.warning("Order2: EMA_TREND not ready — skipping order2.")
+            return
+        if direction == "long" and not (close > trend):
+            log.info("Order2: long blocked by EMA_TREND (close=%.5f <= ema=%.5f).", close, trend)
+            return
+        if direction == "short" and not (close < trend):
+            log.info("Order2: short blocked by EMA_TREND (close=%.5f >= ema=%.5f).", close, trend)
+            return
+
+        qty = compute_order_quantity(self.ib, self.contract)
+        if qty <= 0:
+            log.error("Order2: sizing returned 0 — skipping.")
+            return
+
+        log.info("Order2: %s  entry=%.5f  TP=%.5f  qty=%d", direction, close, tp, qty)
 
         parent = Order()
         parent.action        = action
         parent.orderType     = "MKT"
-        parent.totalQuantity = TOTAL_CAPITAL*TRADE_QUANTITY
+        parent.totalQuantity = qty
         parent.transmit      = False
 
         tp_order = Order()
         tp_order.action        = "SELL" if action == "BUY" else "BUY"
         tp_order.orderType     = "LMT"
         tp_order.lmtPrice      = round(tp, 5)
-        tp_order.totalQuantity = TOTAL_CAPITAL*TRADE_QUANTITY
+        tp_order.totalQuantity = qty
         tp_order.transmit      = True
 
         try:
@@ -526,7 +575,7 @@ class DailyStrategy:
                 entry_price    = real_entry_price,
                 tp_price       = tp,
                 sl_price       = 0.0,
-                total_quantity = TOTAL_CAPITAL * TRADE_QUANTITY,
+                total_quantity = qty,
                 is_open        = True,
                 has_sl         = False,
             )
@@ -570,37 +619,63 @@ class DailyStrategy:
         return None
 
     def _market_close_order(self, parent_id: int) -> None:
-        """Cancel bracket children and close the order's actual remaining filled quantity."""
-        order_record = self._get_order_record(parent_id)
-        total_qty = int(order_record.get("total_quantity", 0)) if order_record else 0
+        """
+        Close ONE order's position:
+        Cancel its bracket children, then flatten exactly the quantity that order bought/sold, in the opposite of the order's OWN direction.
+        """
+        if parent_id <= 0:
+            log.warning("Market-close requested with no order id — skipping.")
+            return
 
         for trade in self.ib.trades():
-            if trade.order.parentId == parent_id:
+            if trade.order.parentId == parent_id and trade.orderStatus.status == "Filled":
+                log.info("Market-close: TP child of order %d already filled — nothing to close.", parent_id)
+                return
+
+        _DONE = ("Filled", "Cancelled", "ApiCancelled", "Inactive")
+        for trade in self.ib.trades():
+            if trade.order.parentId == parent_id and trade.orderStatus.status not in _DONE:
                 try:
                     self.ib.cancelOrder(trade.order)
                 except Exception:
                     pass
 
-        for pos in self.ib.positions():
-            if pos.contract.symbol == self.contract.symbol and abs(pos.position) > 0:
-                qty = abs(pos.position)
-                if total_qty > 0:
-                    qty = min(total_qty, qty)
-                if qty <= 0:
-                    continue
+        order_record = self._get_order_record(parent_id)
+        if not order_record:
+            log.critical("Market-close: no order record for id=%d — cannot determine "
+                         "quantity/direction; NOT flattening the whole symbol. "
+                         "Close manually in TWS if a position remains.", parent_id)
+            return
 
-                action = "SELL" if pos.position > 0 else "BUY"
-                flat = Order()
-                flat.action        = action
-                flat.orderType     = "MKT"
-                flat.totalQuantity = qty
-                flat.transmit      = True
+        direction = order_record.get("direction", "")
+        qty = int(order_record.get("total_quantity", 0) or 0)
+
+        for trade in self.ib.trades():
+            if trade.order.orderId == parent_id:
                 try:
-                    self.ib.placeOrder(self.contract, flat)
-                    log.info("Market-close order placed (action=%s qty=%d)", action, qty)
-                except Exception as exc:
-                    log.error("Market close failed: %s", exc)
+                    filled = int(abs(trade.orderStatus.filled or 0))
+                except (TypeError, ValueError):
+                    filled = 0
+                if filled > 0:
+                    qty = min(qty, filled) if qty > 0 else filled
                 break
+
+        if qty <= 0 or direction not in ("long", "short"):
+            log.error("Market-close: unusable record for id=%d (qty=%s, direction=%r) — skipping.",
+                      parent_id, qty, direction)
+            return
+
+        action = "SELL" if direction == "long" else "BUY"
+        flat = Order()
+        flat.action        = action
+        flat.orderType     = "MKT"
+        flat.totalQuantity = qty
+        flat.transmit      = True
+        try:
+            self.ib.placeOrder(self.contract, flat)
+            log.info("Market-close placed for order %d (action=%s qty=%d)", parent_id, action, qty)
+        except Exception as exc:
+            log.error("Market close failed: %s", exc)
 
 
     # ====================================================================
@@ -631,6 +706,10 @@ class DailyStrategy:
             end_dt      = self.shutoff_dt,
         )
         log.info("FullTradingEngine created with levels: %s", levels)
+
+        warm = self._fetch_recent_bars()
+        if warm:
+            self._ft_engine.warmup(warm)
 
     def _set_datetime_anchors(self, sb: SessionBoundariesCandles, trade_date: Optional[date] = None) -> None:
         """
@@ -693,60 +772,81 @@ class DailyStrategy:
 
         return
 
-    def _fetch_historical_asia_bars(self) -> None:
+    def _fetch_recent_bars(self, duration: str = WARMUP_DURATION) -> list[Bar]:
         """
-        Fetch all historical 5-min bars for the current Asia session (asia_open to asia_close).
+        Fetch recent closed 5-min MIDPOINT bars (oldest first) for EMA warm-up.
         """
-        if self.asia_open_dt is None or self.asia_close_dt is None:
-            log.warning("Cannot fetch Asia bars: session boundaries not set.")
-            return
-
-        log.info("Fetching historical Asia bars from %s to %s", self.asia_open_dt, self.asia_close_dt)
-        
         try:
             bars = self.ib.reqHistoricalData(
                 self.contract,
-                endDateTime=self.asia_close_dt,
-                durationStr="1 D",
-                barSizeSetting="5 mins",
-                whatToShow="TRADES",
-                useRTH=False,
+                endDateTime    = "",
+                durationStr    = duration,
+                barSizeSetting = BAR_SIZE,
+                whatToShow     = "MIDPOINT",
+                useRTH         = False,
+                formatDate     = 2,
             )
-            
-            if not bars:
-                log.warning("No historical bars returned for Asia session.")
-                return
-            
-            asia_bars_filtered = []
-            for ib_bar in bars:
-                bar = Bar.from_ib(ib_bar)
-                if self.asia_open_dt <= bar.date <= self.asia_close_dt:
-                    asia_bars_filtered.append(bar)
-            
-            self._asia_bars = asia_bars_filtered
-            log.info("Recovered %d historical Asia bars.", len(self._asia_bars))
-            
-            if self._asia_bars:
-                bar_dicts = [
-                    {
-                        "open": b.open,
-                        "high": b.high,
-                        "low": b.low,
-                        "close": b.close,
-                        "volume": b.volume,
-                        "date": b.date.isoformat(),
-                    }
-                    for b in self._asia_bars
-                ]
-                self.sm.set_asia_bars(bar_dicts)
-                
-                self.asia_high = max(b.high for b in self._asia_bars)
-                self.asia_low = min(b.low for b in self._asia_bars)
-                self.sm.set_asia_range(self.asia_high, self.asia_low)
-                log.info("Recalculated Asia range: high=%.5f  low=%.5f", self.asia_high, self.asia_low)
-        
+        except Exception as exc:
+            log.warning("Warm-up bar fetch failed: %s", exc)
+            return []
+        if not bars:
+            return []
+        out = [Bar.from_ib(b) for b in bars]
+        return out[:-1] if len(out) > 1 else []
+
+    def _bar_is_fresh(self, bar: Bar) -> bool:
+        """
+        True if the bar closed within STALE_TRIGGER_MAX_MINUTES of now.
+        """
+        bar_close = bar.date + timedelta(minutes=5)
+        return datetime.now(REF_TZ) - bar_close <= timedelta(minutes=STALE_TRIGGER_MAX_MINUTES)
+
+    def _fetch_historical_asia_bars(self) -> list[Bar]:
+        """
+        Fetch the current Asia session's 5-min bars (asia_open .. asia_close.
+        """
+        if self.asia_open_dt is None or self.asia_close_dt is None:
+            log.warning("Cannot fetch Asia bars: session boundaries not set.")
+            return []
+
+        log.info("Fetching historical Asia bars from %s to %s", self.asia_open_dt, self.asia_close_dt)
+
+        try:
+            bars = self.ib.reqHistoricalData(
+                self.contract,
+                endDateTime    = self.asia_close_dt + timedelta(minutes=5),
+                durationStr    = "1 D",
+                barSizeSetting = "5 mins",
+                whatToShow     = "MIDPOINT",
+                useRTH         = False,
+                formatDate     = 2,
+            )
         except Exception as exc:
             log.error("Failed to fetch historical Asia bars: %s", exc)
+            return []
+
+        out: list[Bar] = []
+        for ib_bar in bars or []:
+            b = Bar.from_ib(ib_bar)
+            if self.asia_open_dt <= b.date <= self.asia_close_dt:
+                out.append(b)
+        log.info("Recovered %d historical Asia bars.", len(out))
+        return out
+
+
+def _bars_to_dicts(bars: list[Bar]) -> list[dict]:
+    """Serialise bars for the state file."""
+    return [
+        {
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume,
+            "date": b.date.isoformat(),
+        }
+        for b in bars
+    ]
 
 
 def _dict_to_sb(d: dict) -> SessionBoundariesCandles:
