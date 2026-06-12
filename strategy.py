@@ -26,7 +26,7 @@ from dataclasses import asdict
 
 from ib_insync import IB, Contract, Order
 
-from full_trading import Bar, EMATracker, FullTradingEngine
+from full_trading import *
 from state_manager import OrderRecord, StateManager
 from timezone_utils import SessionBoundariesCandles
 
@@ -94,6 +94,12 @@ class DailyStrategy:
         st = self.sm.state
         phase = st.phase
         log.info("Bootstrapping from phase=%s  date=%s", phase, st.trade_date)
+
+        try:
+            self.ib.reqExecutions()
+            log.info("Synced %d executions from IB.", len(self.ib.fills()))
+        except Exception as exc:
+            log.warning("Could not sync executions: %s", exc)
 
         if st.time_boundaries:
             self.sb = _dict_to_sb(st.time_boundaries)
@@ -234,6 +240,8 @@ class DailyStrategy:
             if vp1:
                 self.vah1, self.poc1, self.val1 = vp1.vah, vp1.poc, vp1.val
                 self.sm.set_vp(1, vp1.vah, vp1.poc, vp1.val)
+            else:
+                log.warning("VP1 unavailable — order1 will be SKIPPED today (no POC_1 target).")
             self.sm.set_phase(PHASE_WAIT_ORDER1)
 
     def _ph_wait_order1(self, bar: Bar) -> None:
@@ -278,7 +286,7 @@ class DailyStrategy:
         Route each bar to the engine; watch for london_close
         """
         if self._ft_engine is None:
-            self._create_full_trading_engine()
+            self._create_full_trading_engine(up_to=bar.date - timedelta(minutes=5))
 
         self._ft_engine.on_bar(bar)
 
@@ -293,6 +301,8 @@ class DailyStrategy:
             if vp3:
                 self.vah3, self.poc3, self.val3 = vp3.vah, vp3.poc, vp3.val
                 self.sm.set_vp(3, vp3.vah, vp3.poc, vp3.val)
+            else:
+                log.warning("VP3 unavailable — order2 will be SKIPPED today (no POC_3).")
             self.sm.set_phase(PHASE_WAIT_ORDER2)
 
     def _ph_wait_order2(self, bar: Bar) -> None:
@@ -363,6 +373,8 @@ class DailyStrategy:
         if vp2:
             self.vah2, self.poc2, self.val2 = vp2.vah, vp2.poc, vp2.val
             self.sm.set_vp(2, vp2.vah, vp2.poc, vp2.val)
+        else:
+            log.warning("VP2 unavailable — Full Trading will run on AH/AL only and order2 may be skipped.")
 
         fetched = self._fetch_historical_asia_bars()
         if fetched:
@@ -376,7 +388,7 @@ class DailyStrategy:
             self.sm.set_asia_bars(_bars_to_dicts(self._asia_bars))
             log.info("Asia range: high=%.5f  low=%.5f  (saved %d bars)", self.asia_high, self.asia_low, len(self._asia_bars))
 
-        self._create_full_trading_engine()
+        self._create_full_trading_engine(up_to=bar.date)
         self.sm.set_phase(PHASE_FULL_TRADING)
 
     def _handle_shutoff(self) -> None:
@@ -481,15 +493,17 @@ class DailyStrategy:
         tp.totalQuantity = qty
         tp.transmit      = True
 
+        parent_trade = None
         try:
             parent_trade  = self.ib.placeOrder(self.contract, parent)
             real_entry_price = close
             tp.parentId   = parent_trade.order.orderId
-            self.ib.placeOrder(self.contract, tp)
+            tp_trade = self.ib.placeOrder(self.contract, tp)
             self._order1_ib_id = parent_trade.order.orderId
 
             rec = OrderRecord(
                 ib_order_id    = self._order1_ib_id,
+                tp_order_id    = tp_trade.order.orderId,
                 direction      = direction,
                 entry_price    = real_entry_price,
                 tp_price       = poc,
@@ -499,9 +513,15 @@ class DailyStrategy:
                 has_sl         = False,
             )
             self.sm.record_order1(rec)
-            log.info("Order1 placed: id=%d", self._order1_ib_id)
+            log.info("Order1 placed: id=%d  tp_id=%d", self._order1_ib_id, tp_trade.order.orderId)
         except Exception as exc:
             log.error("Order1 placement failed: %s", exc)
+            if parent_trade is not None:
+                try:
+                    self.ib.cancelOrder(parent_trade.order)
+                except Exception:
+                    pass
+                self._order1_ib_id = 0
 
     def _place_order2(self, bar: Bar) -> None:
         """
@@ -562,15 +582,17 @@ class DailyStrategy:
         tp_order.totalQuantity = qty
         tp_order.transmit      = True
 
+        parent_trade = None
         try:
             parent_trade      = self.ib.placeOrder(self.contract, parent)
             real_entry_price = close
             tp_order.parentId = parent_trade.order.orderId
-            self.ib.placeOrder(self.contract, tp_order)
+            tp_trade = self.ib.placeOrder(self.contract, tp_order)
             self._order2_ib_id = parent_trade.order.orderId
 
             rec = OrderRecord(
                 ib_order_id    = self._order2_ib_id,
+                tp_order_id    = tp_trade.order.orderId,
                 direction      = direction,
                 entry_price    = real_entry_price,
                 tp_price       = tp,
@@ -580,37 +602,49 @@ class DailyStrategy:
                 has_sl         = False,
             )
             self.sm.record_order2(rec)
-            log.info("Order2 placed: id=%d", self._order2_ib_id)
+            log.info("Order2 placed: id=%d  tp_id=%d", self._order2_ib_id, tp_trade.order.orderId)
         except Exception as exc:
             log.error("Order2 placement failed: %s", exc)
+            if parent_trade is not None:
+                try:
+                    self.ib.cancelOrder(parent_trade.order)
+                except Exception:
+                    pass
+                self._order2_ib_id = 0
 
 
     # ====================================================================
     # Order monitoring helpers
     # ====================================================================
+    def _tp_filled(self, parent_id: int) -> bool:
+        """True if the TP child of *parent_id* has filled (trades() or executions)."""
+        rec = self._get_order_record(parent_id)
+        tp_id = int(rec.get("tp_order_id", 0) or 0) if rec else 0
+        if order_filled(self.ib, tp_id):
+            return True
+        for trade in self.ib.trades():
+            if (trade.order.parentId == parent_id and
+                    trade.orderStatus.status == "Filled"):
+                return True
+        return False
+
     def _check_order1_tp(self, bar: Bar) -> None:
-        """Check if order1's TP has been hit via IB trade status."""
+        """Check if order1's TP has been hit via IB trade status / executions."""
         if self._order1_ib_id == 0:
             return
-        for trade in self.ib.trades():
-            if (trade.order.parentId == self._order1_ib_id and
-                    trade.orderStatus.status == "Filled"):
-                log.info("Order1 TP filled.")
-                self.sm.mark_order1_closed("tp")
-                self.sm.set_phase(PHASE_WAIT_ASIA_CLOSE)
-                return
+        if self._tp_filled(self._order1_ib_id):
+            log.info("Order1 TP filled.")
+            self.sm.mark_order1_closed("tp")
+            self.sm.set_phase(PHASE_WAIT_ASIA_CLOSE)
 
     def _check_order2_tp(self, bar: Bar) -> None:
-        """Check if order2's TP has been hit via IB trade status."""
+        """Check if order2's TP has been hit via IB trade status / executions."""
         if self._order2_ib_id == 0:
             return
-        for trade in self.ib.trades():
-            if (trade.order.parentId == self._order2_ib_id and
-                    trade.orderStatus.status == "Filled"):
-                log.info("Order2 TP filled.")
-                self.sm.mark_order2_closed("tp")
-                self.sm.set_phase(PHASE_WAIT_SHUTOFF)
-                return
+        if self._tp_filled(self._order2_ib_id):
+            log.info("Order2 TP filled.")
+            self.sm.mark_order2_closed("tp")
+            self.sm.set_phase(PHASE_WAIT_SHUTOFF)
 
     def _get_order_record(self, parent_id: int) -> Optional[dict]:
         for order_record in (self.sm.state.order1, self.sm.state.order2):
@@ -621,24 +655,13 @@ class DailyStrategy:
     def _market_close_order(self, parent_id: int) -> None:
         """
         Close ONE order's position:
-        Cancel its bracket children, then flatten exactly the quantity that order bought/sold, in the opposite of the order's OWN direction.
+        Cancel its bracket children, then flatten exactly what that order is
+        still holding — entry fill minus TP fill — in the opposite of the
+        order's OWN direction, clamped to the account's net position.
         """
         if parent_id <= 0:
             log.warning("Market-close requested with no order id — skipping.")
             return
-
-        for trade in self.ib.trades():
-            if trade.order.parentId == parent_id and trade.orderStatus.status == "Filled":
-                log.info("Market-close: TP child of order %d already filled — nothing to close.", parent_id)
-                return
-
-        _DONE = ("Filled", "Cancelled", "ApiCancelled", "Inactive")
-        for trade in self.ib.trades():
-            if trade.order.parentId == parent_id and trade.orderStatus.status not in _DONE:
-                try:
-                    self.ib.cancelOrder(trade.order)
-                except Exception:
-                    pass
 
         order_record = self._get_order_record(parent_id)
         if not order_record:
@@ -647,22 +670,49 @@ class DailyStrategy:
                          "Close manually in TWS if a position remains.", parent_id)
             return
 
-        direction = order_record.get("direction", "")
-        qty = int(order_record.get("total_quantity", 0) or 0)
+        if self._tp_filled(parent_id):
+            log.info("Market-close: TP of order %d already filled — nothing to close.", parent_id)
+            return
 
+        tp_id = int(order_record.get("tp_order_id", 0) or 0)
+
+        _DONE = ("Filled", "Cancelled", "ApiCancelled", "Inactive")
         for trade in self.ib.trades():
-            if trade.order.orderId == parent_id:
+            is_child = (trade.order.parentId == parent_id
+                        or (tp_id > 0 and trade.order.orderId == tp_id))
+            if is_child and trade.orderStatus.status not in _DONE:
                 try:
-                    filled = int(abs(trade.orderStatus.filled or 0))
-                except (TypeError, ValueError):
-                    filled = 0
-                if filled > 0:
-                    qty = min(qty, filled) if qty > 0 else filled
-                break
+                    self.ib.cancelOrder(trade.order)
+                except Exception:
+                    pass
 
-        if qty <= 0 or direction not in ("long", "short"):
-            log.error("Market-close: unusable record for id=%d (qty=%s, direction=%r) — skipping.",
-                      parent_id, qty, direction)
+        direction = order_record.get("direction", "")
+        qty_rec = int(order_record.get("total_quantity", 0) or 0)
+
+        if direction not in ("long", "short"):
+            log.error("Market-close: unusable record for id=%d (direction=%r) — skipping.",
+                      parent_id, direction)
+            return
+
+        entry_filled = filled_qty(self.ib, parent_id)
+        exit_filled  = filled_qty(self.ib, tp_id)
+
+        if entry_filled > 0:
+            qty = max(0, entry_filled - exit_filled)
+        else:
+            qty = qty_rec
+
+        net = net_position(self.ib, self.contract)
+        closable = max(0.0, net) if direction == "long" else max(0.0, -net)
+        if qty > closable:
+            log.warning("Market-close: qty %d clamped to net closable %d (net=%.0f).",
+                        qty, int(closable), net)
+            qty = int(closable)
+
+        if qty <= 0:
+            log.info("Market-close: nothing left to close for order %d "
+                     "(entry_filled=%d exit_filled=%d net=%.0f).",
+                     parent_id, entry_filled, exit_filled, net)
             return
 
         action = "SELL" if direction == "long" else "BUY"
@@ -681,7 +731,7 @@ class DailyStrategy:
     # ====================================================================
     # Helpers
     # ====================================================================
-    def _create_full_trading_engine(self) -> None:
+    def _create_full_trading_engine(self, up_to: Optional[datetime] = None) -> None:
         if self._ft_engine is not None:
             return
 
@@ -709,7 +759,7 @@ class DailyStrategy:
 
         warm = self._fetch_recent_bars()
         if warm:
-            self._ft_engine.warmup(warm)
+            self._ft_engine.warmup(warm, up_to=up_to)
 
     def _set_datetime_anchors(self, sb: SessionBoundariesCandles, trade_date: Optional[date] = None) -> None:
         """

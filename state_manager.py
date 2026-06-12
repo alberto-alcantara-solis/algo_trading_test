@@ -22,24 +22,9 @@ log = logging.getLogger(__name__)
 # Data classes
 # ---------------------------------------------------------------------------
 @dataclass
-class VPState:
-    vah: Optional[float] = None
-    poc: Optional[float] = None
-    val: Optional[float] = None
-
-@dataclass
-class BarRecord:
-    """Persistent representation of a trading bar."""
-    open:   float  = 0.0
-    high:   float  = 0.0
-    low:    float  = 0.0
-    close:  float  = 0.0
-    volume: float  = 0.0
-    date:   str    = ""
-
-@dataclass
 class OrderRecord:
     ib_order_id:   int     = 0
+    tp_order_id:   int     = 0
     direction:     str     = ""      # "long" | "short"
     entry_price:   float   = 0.0
     tp_price:      float   = 0.0
@@ -48,33 +33,6 @@ class OrderRecord:
     is_open:       bool    = True
     has_sl:        bool    = True
     closed_reason: str     = ""      # "tp" | "sl" | "market" | "cancel"
-
-@dataclass
-class SlotState:
-    """Mirrors full_trading.Slot"""
-    slot_id:       int   = 0
-    stage:         str   = "FVG_DETECT"
-    direction:     str   = ""
-    broke_levels:  list  = field(default_factory=list)
-
-    c1_high:       float = 0.0
-    c1_low:        float = 0.0
-    c2_open:       float = 0.0
-    c2_close:      float = 0.0
-    c2_bar_dt:     str   = ""
-
-    bot_fvg:       float = 0.0
-    top_fvg:       float = 0.0
-
-    min_close_in_fvg:  float = 0.0
-    min_low_in_fvg:    float = 0.0
-    max_close_in_fvg:  float = 0.0
-    max_high_in_fvg:   float = 0.0
-
-    ib_order_id:   int   = 0
-    entry_price:   float = 0.0
-    sl_price:      float = 0.0
-    tp_price:      float = 0.0
 
 @dataclass
 class DayState:
@@ -102,7 +60,7 @@ class DayState:
     asia_high: Optional[float] = None
     asia_low:  Optional[float] = None
 
-    asia_bars: list = field(default_factory=list)  # List of BarRecord dicts
+    asia_bars: list = field(default_factory=list)
 
     slots: list = field(default_factory=list)
 
@@ -154,9 +112,6 @@ class StateManager:
         self._state = DayState(trade_date=trade_date.isoformat())
         self.save()
         log.info("State reset for new day: %s", trade_date)
-
-    def is_same_day(self, trade_date: date) -> bool:
-        return self._state.trade_date == trade_date.isoformat()
 
     def set_phase(self, phase: str) -> None:
         self._state.phase = phase

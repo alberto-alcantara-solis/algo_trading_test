@@ -22,13 +22,15 @@ import sys
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-from ib_insync import IB, Forex
+from ib_insync import IB, Forex, util
 
 from config import *
 from full_trading import Bar
 from state_manager import StateManager
 from strategy import DailyStrategy, PHASE_DONE, PHASE_WAIT_ASIA_OPEN
 from timezone_utils import is_trading_day
+
+util.patchAsyncio()
 
 
 # ---------------------------------------------------------------------------
