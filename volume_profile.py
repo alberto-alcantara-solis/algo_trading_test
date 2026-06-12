@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -80,9 +80,8 @@ def _fetch_window_bars(
     for b in bars or []:
         bd = b.date
         if bd.tzinfo is None:
-            bd = bd.replace(tzinfo=REF_TZ)
-        else:
-            bd = bd.astimezone(REF_TZ)
+            bd = bd.replace(tzinfo=timezone.utc)
+        bd = bd.astimezone(REF_TZ)
         if start_dt <= bd < end_dt:
             out.append((bd, float(b.open), float(b.high), float(b.low), float(b.close)))
     return out
