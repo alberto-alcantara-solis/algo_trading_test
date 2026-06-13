@@ -91,6 +91,33 @@ def order_filled(ib: IB, order_id: int) -> bool:
     return False
 
 
+def order_rejected(trade: Optional[Trade]) -> bool:
+    """
+    True if a just-placed Trade was killed by IB without filling.
+    """
+    if trade is None:
+        return False
+    try:
+        status = trade.orderStatus.status
+        filled = float(trade.orderStatus.filled or 0)
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return status in ("Cancelled", "ApiCancelled", "Inactive") and filled <= 0
+
+
+def last_trade_error(trade: Optional[Trade]) -> str:
+    """Best-effort human-readable reason from a Trade's log entries."""
+    if trade is None:
+        return "unknown"
+    try:
+        for entry in reversed(trade.log):
+            if getattr(entry, "errorCode", 0) or getattr(entry, "message", ""):
+                return f"code={entry.errorCode} {entry.message}".strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Slot stages
 # ---------------------------------------------------------------------------
@@ -344,6 +371,7 @@ class Slot:
         parent_order.action          = action
         parent_order.orderType       = "MKT"
         parent_order.totalQuantity   = qty
+        parent_order.tif             = ORDER_TIF
         parent_order.transmit        = False
 
         tp_order = Order()
@@ -351,6 +379,7 @@ class Slot:
         tp_order.orderType     = "LMT"
         tp_order.lmtPrice      = round(tp, 5)
         tp_order.totalQuantity = parent_order.totalQuantity
+        tp_order.tif           = ORDER_TIF
         tp_order.transmit      = False
 
         sl_order = Order()
@@ -358,10 +387,12 @@ class Slot:
         sl_order.orderType     = "STP"
         sl_order.auxPrice      = round(sl, 5)
         sl_order.totalQuantity = parent_order.totalQuantity
+        sl_order.tif           = ORDER_TIF
         sl_order.transmit      = True
 
         parent_trade = None
         tp_trade     = None
+        sl_trade     = None
         try:
             parent_trade = ib.placeOrder(contract, parent_order)
             tp_order.parentId = parent_trade.order.orderId
@@ -373,6 +404,19 @@ class Slot:
             log.error("[Slot %d] Order placement failed: %s", self.slot_id, exc)
             for staged in (parent_trade, tp_trade):
                 if staged is not None:
+                    try:
+                        ib.cancelOrder(staged.order)
+                    except Exception:
+                        pass
+            return self._discard()
+
+        ib.sleep(ORDER_REJECT_WAIT_S)
+        if order_rejected(parent_trade):
+            log.error("[Slot %d] Bracket REJECTED by IB (%s) — discarding slot. "
+                      "If this is error 201, check the account's FX trading permissions.",
+                      self.slot_id, last_trade_error(parent_trade))
+            for staged in (tp_trade, sl_trade):
+                if staged is not None and staged.orderStatus.status not in _DONE_STATUSES:
                     try:
                         ib.cancelOrder(staged.order)
                     except Exception:
@@ -440,6 +484,12 @@ class Slot:
             self._save()
             return True
         
+        if self._trade is not None and order_rejected(self._trade):
+            log.error("[Slot %d] Parent order rejected/cancelled by IB (%s) — discarding slot.",
+                      self.slot_id, last_trade_error(self._trade))
+            self._cancel_orders(ib)
+            return self._discard()
+
         if self.direction == "long":
             if bar.close < self.bot_fvg or (ema is not None and bar.close < ema):
                 log.info("[Slot %d] Long: close below bot_fvg/EMA while waiting for order fill — discard.", self.slot_id)
@@ -461,7 +511,7 @@ class Slot:
             for t in ib.trades():
                 if t.order.orderId == self.ib_order_id:
                     self._trade = t
-                    log.info("[Slot %d] Recovered Trade object from IB (order_id=%d)", 
+                    log.info("[Slot %d] Recovered Trade object from IB (order_id=%d)",
                              self.slot_id, self.ib_order_id)
                     break
 
@@ -570,6 +620,7 @@ class Slot:
         close_order.action        = action
         close_order.orderType     = "MKT"
         close_order.totalQuantity = qty
+        close_order.tif           = "DAY"   # immediate flatten — explicit TIF avoids error 10349
         close_order.transmit      = True
         try:
             ib.placeOrder(contract, close_order)

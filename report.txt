@@ -1,0 +1,831 @@
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2000.csv
+======================================================================================
+Trading days simulated : 151
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            21    15     6   71.4%     -54.5     -2.60       -109.01   0.50
+Order 2            33    22    10   66.7%     103.3      3.13        206.54   1.75
+Full Trading      160    56   102   35.0%    -366.3     -2.29       -732.50   0.81
+TOTAL             214    93   118   43.5%    -317.5     -1.48       -634.97   0.85
+
+Exit reasons per component:
+  Order 1      : market_close=7  tp=14   (best +23.8 / worst -33.0 pips)
+  Order 2      : shutoff=15  tp=18   (best +26.3 / worst -47.0 pips)
+  Full Trading : data_end=1  shutoff=43  sl=91  tp=25   (best +79.7 / worst -50.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -109.01  ( -17.2% of total)  ######
+  Order 2      :       206.54  ( +32.5% of total)  #############
+  Full Trading :      -732.50  (-115.4% of total)  ########################################
+  TOTAL        :      -634.97  (-635.0 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2001.csv
+======================================================================================
+Trading days simulated : 236
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            26    21     5   80.8%     -39.9     -1.53        -79.70   0.67
+Order 2            53    32    20   60.4%     -36.3     -0.69        -72.65   0.83
+Full Trading      249    94   152   37.8%     -29.3     -0.12        -58.50   0.99
+TOTAL             328   147   177   44.8%    -105.4     -0.32       -210.86   0.97
+
+Exit reasons per component:
+  Order 1      : market_close=6  tp=20   (best +16.1 / worst -48.0 pips)
+  Order 2      : shutoff=28  tp=25   (best +20.6 / worst -28.0 pips)
+  Full Trading : shutoff=89  sl=134  tp=26   (best +105.0 / worst -48.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -79.70  ( -37.8% of total)  ###############
+  Order 2      :       -72.65  ( -34.5% of total)  #############
+  Full Trading :       -58.50  ( -27.7% of total)  ###########
+  TOTAL        :      -210.86  (-210.9 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2002.csv
+======================================================================================
+Trading days simulated : 226
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            31    20    11   64.5%     -50.2     -1.62       -100.35   0.71
+Order 2            48    25    21   52.1%    -119.3     -2.49       -238.59   0.62
+Full Trading      189    57   130   30.2%     -84.0     -0.44       -168.00   0.96
+TOTAL             268   102   162   38.1%    -253.5     -0.95       -506.95   0.89
+
+Exit reasons per component:
+  Order 1      : market_close=13  tp=18   (best +42.3 / worst -28.0 pips)
+  Order 2      : shutoff=29  tp=19   (best +29.8 / worst -34.0 pips)
+  Full Trading : data_end=1  shutoff=45  sl=113  tp=30   (best +88.0 / worst -50.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -100.35  ( -19.8% of total)  #######
+  Order 2      :      -238.59  ( -47.1% of total)  ##################
+  Full Trading :      -168.00  ( -33.1% of total)  #############
+  TOTAL        :      -506.95  (-506.9 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2003.csv
+======================================================================================
+Trading days simulated : 256
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            23    20     3   87.0%      59.2      2.57        118.37   2.44
+Order 2            70    37    33   52.9%     -84.1     -1.20       -168.23   0.81
+Full Trading      271   102   168   37.6%     369.0      1.36        738.00   1.12
+TOTAL             364   159   204   43.7%     344.1      0.95        688.14   1.10
+
+Exit reasons per component:
+  Order 1      : market_close=4  tp=19   (best +17.9 / worst -21.0 pips)
+  Order 2      : shutoff=47  tp=23   (best +53.2 / worst -38.0 pips)
+  Full Trading : shutoff=76  sl=151  tp=44   (best +115.5 / worst -44.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       118.37  ( +17.2% of total)  ######
+  Order 2      :      -168.23  ( -24.4% of total)  #########
+  Full Trading :       738.00  (+107.2% of total)  ########################################
+  TOTAL        :       688.14  (+688.1 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2004.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            32    23     9   71.9%     -30.4     -0.95        -60.75   0.79
+Order 2            76    38    38   50.0%     -83.1     -1.09       -166.15   0.87
+Full Trading      259    91   166   35.1%    -282.2     -1.09       -564.50   0.93
+TOTAL             367   152   213   41.4%    -395.7     -1.08       -791.40   0.92
+
+Exit reasons per component:
+  Order 1      : market_close=9  tp=23   (best +31.7 / worst -38.0 pips)
+  Order 2      : shutoff=54  tp=22   (best +65.0 / worst -59.0 pips)
+  Full Trading : shutoff=76  sl=145  tp=38   (best +140.3 / worst -79.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -60.75  (  -7.7% of total)  ###
+  Order 2      :      -166.15  ( -21.0% of total)  ########
+  Full Trading :      -564.50  ( -71.3% of total)  ############################
+  TOTAL        :      -791.40  (-791.4 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2005.csv
+======================================================================================
+Trading days simulated : 257
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            25    20     5   80.0%      19.3      0.77         38.55   1.31
+Order 2            65    34    30   52.3%      61.2      0.94        122.48   1.16
+Full Trading      278   100   171   36.0%    -168.3     -0.61       -336.50   0.95
+TOTAL             368   154   206   41.8%     -87.7     -0.24       -175.47   0.98
+
+Exit reasons per component:
+  Order 1      : market_close=6  tp=19   (best +9.7 / worst -20.0 pips)
+  Order 2      : shutoff=47  tp=18   (best +41.9 / worst -36.0 pips)
+  Full Trading : shutoff=88  sl=148  tp=42   (best +110.0 / worst -86.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        38.55  ( +22.0% of total)  ########
+  Order 2      :       122.48  ( +69.8% of total)  ###########################
+  Full Trading :      -336.50  (-191.8% of total)  ########################################
+  TOTAL        :      -175.47  (-175.5 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2006.csv
+======================================================================================
+Trading days simulated : 258
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            27    21     6   77.8%      -7.6     -0.28        -15.11   0.89
+Order 2            71    37    34   52.1%     -57.7     -0.81       -115.44   0.86
+Full Trading      237    85   151   35.9%    -153.3     -0.65       -306.50   0.95
+TOTAL             335   143   191   42.7%    -218.5     -0.65       -437.05   0.94
+
+Exit reasons per component:
+  Order 1      : market_close=10  tp=17   (best +11.0 / worst -21.0 pips)
+  Order 2      : shutoff=51  tp=20   (best +33.0 / worst -37.0 pips)
+  Full Trading : shutoff=65  sl=127  tp=45   (best +115.5 / worst -87.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -15.11  (  -3.5% of total)  #
+  Order 2      :      -115.44  ( -26.4% of total)  ##########
+  Full Trading :      -306.50  ( -70.1% of total)  ############################
+  TOTAL        :      -437.05  (-437.0 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2007.csv
+======================================================================================
+Trading days simulated : 259
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            28    18    10   64.3%     -68.1     -2.43       -136.29   0.56
+Order 2            64    36    26   56.2%      78.8      1.23        157.53   1.27
+Full Trading      221    78   143   35.3%     125.7      0.57        251.50   1.05
+TOTAL             313   132   179   42.2%     136.4      0.44        272.74   1.05
+
+Exit reasons per component:
+  Order 1      : market_close=11  tp=17   (best +26.2 / worst -49.0 pips)
+  Order 2      : shutoff=47  tp=17   (best +38.0 / worst -48.0 pips)
+  Full Trading : shutoff=75  sl=115  tp=31   (best +115.5 / worst -67.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -136.29  ( -50.0% of total)  ###################
+  Order 2      :       157.53  ( +57.8% of total)  #######################
+  Full Trading :       251.50  ( +92.2% of total)  ####################################
+  TOTAL        :       272.74  (+272.7 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2008.csv
+======================================================================================
+Trading days simulated : 259
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            14     8     6   57.1%     -87.0     -6.21       -173.97   0.46
+Order 2            79    55    23   69.6%     172.9      2.19        345.84   1.25
+Full Trading      281   104   177   37.0%     713.5      2.54       1427.00   1.13
+TOTAL             374   167   206   44.7%     799.4      2.14       1598.87   1.13
+
+Exit reasons per component:
+  Order 1      : market_close=6  tp=8   (best +22.4 / worst -88.0 pips)
+  Order 2      : shutoff=50  tp=29   (best +93.0 / worst -189.0 pips)
+  Full Trading : shutoff=86  sl=150  tp=45   (best +187.0 / worst -94.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -173.97  ( -10.9% of total)  ####
+  Order 2      :       345.84  ( +21.6% of total)  ########
+  Full Trading :      1427.00  ( +89.3% of total)  ###################################
+  TOTAL        :      1598.87  (+1598.9 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2009.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            35    27     8   77.1%      35.9      1.03         71.77   1.15
+Order 2            81    49    32   60.5%     191.5      2.36        383.01   1.25
+Full Trading      240    84   156   35.0%     -42.2     -0.18        -84.50   0.99
+TOTAL             356   160   196   44.9%     185.1      0.52        370.28   1.03
+
+Exit reasons per component:
+  Order 1      : market_close=14  tp=21   (best +37.0 / worst -86.0 pips)
+  Order 2      : shutoff=59  tp=22   (best +78.9 / worst -83.0 pips)
+  Full Trading : shutoff=68  sl=137  tp=35   (best +165.0 / worst -104.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        71.77  ( +19.4% of total)  #######
+  Order 2      :       383.01  (+103.4% of total)  ########################################
+  Full Trading :       -84.50  ( -22.8% of total)  #########
+  TOTAL        :       370.28  (+370.3 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2010.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            24    17     7   70.8%      53.6      2.23        107.13   1.55
+Order 2            69    45    22   65.2%     124.7      1.81        249.45   1.38
+Full Trading      243    99   141   40.7%     880.5      3.62       1761.00   1.26
+TOTAL             336   161   170   47.9%    1058.8      3.15       2117.58   1.28
+
+Exit reasons per component:
+  Order 1      : market_close=7  tp=17   (best +26.1 / worst -50.0 pips)
+  Order 2      : shutoff=48  tp=21   (best +28.6 / worst -35.0 pips)
+  Full Trading : shutoff=76  sl=121  tp=46   (best +101.8 / worst -76.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       107.13  (  +5.1% of total)  ##
+  Order 2      :       249.45  ( +11.8% of total)  ####
+  Full Trading :      1761.00  ( +83.2% of total)  #################################
+  TOTAL        :      2117.58  (+2117.6 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2011.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            30    19    11   63.3%    -185.8     -6.19       -371.53   0.46
+Order 2            82    49    31   59.8%     182.9      2.23        365.72   1.41
+Full Trading      273    92   180   33.7%    -602.1     -2.21      -1204.25   0.84
+TOTAL             385   160   222   41.6%    -605.0     -1.57      -1210.05   0.87
+
+Exit reasons per component:
+  Order 1      : market_close=13  tp=17   (best +40.0 / worst -54.0 pips)
+  Order 2      : shutoff=57  tp=25   (best +53.0 / worst -64.0 pips)
+  Full Trading : shutoff=82  sl=155  tp=36   (best +134.7 / worst -117.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -371.53  ( -30.7% of total)  ############
+  Order 2      :       365.72  ( +30.2% of total)  ############
+  Full Trading :     -1204.25  ( -99.5% of total)  #######################################
+  TOTAL        :     -1210.05  (-1210.1 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2012.csv
+======================================================================================
+Trading days simulated : 259
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            35    24    11   68.6%       8.5      0.24         17.05   1.09
+Order 2            73    43    30   58.9%     -13.1     -0.18        -26.22   0.94
+Full Trading      317   106   211   33.4%    -723.7     -2.28      -1447.40   0.78
+TOTAL             425   173   252   40.7%    -728.3     -1.71      -1456.57   0.80
+
+Exit reasons per component:
+  Order 1      : market_close=14  tp=21   (best +12.8 / worst -21.1 pips)
+  Order 2      : shutoff=55  tp=18   (best +20.4 / worst -17.6 pips)
+  Full Trading : shutoff=93  sl=187  tp=37   (best +92.9 / worst -56.9 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        17.05  (  +1.2% of total)  
+  Order 2      :       -26.22  (  -1.8% of total)  
+  Full Trading :     -1447.40  ( -99.4% of total)  #######################################
+  TOTAL        :     -1456.57  (-1456.6 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2013.csv
+======================================================================================
+Trading days simulated : 258
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            31    25     6   80.6%      72.3      2.33        144.62   2.32
+Order 2            70    47    23   67.1%      74.4      1.06        148.72   1.28
+Full Trading      256    79   177   30.9%   -1181.5     -4.62      -2362.95   0.61
+TOTAL             357   151   206   42.3%   -1034.8     -2.90      -2069.62   0.69
+
+Exit reasons per component:
+  Order 1      : market_close=11  tp=20   (best +14.9 / worst -16.3 pips)
+  Order 2      : shutoff=46  tp=24   (best +31.7 / worst -56.0 pips)
+  Full Trading : shutoff=79  sl=150  tp=27   (best +72.9 / worst -73.4 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       144.62  (  +7.0% of total)  ##
+  Order 2      :       148.72  (  +7.2% of total)  ##
+  Full Trading :     -2362.95  (-114.2% of total)  ########################################
+  TOTAL        :     -2069.62  (-2069.6 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2014.csv
+======================================================================================
+Trading days simulated : 258
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            30    23     7   76.7%      26.2      0.87         52.41   1.54
+Order 2            77    44    32   57.1%       4.5      0.06          9.10   1.02
+Full Trading      259    85   174   32.8%    -557.4     -2.15      -1114.80   0.76
+TOTAL             366   152   213   41.5%    -526.6     -1.44      -1053.29   0.79
+
+Exit reasons per component:
+  Order 1      : market_close=12  tp=18   (best +8.9 / worst -22.1 pips)
+  Order 2      : shutoff=56  tp=21   (best +24.5 / worst -19.7 pips)
+  Full Trading : shutoff=85  sl=136  tp=38   (best +64.1 / worst -51.1 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        52.41  (  +5.0% of total)  #
+  Order 2      :         9.10  (  +0.9% of total)  
+  Full Trading :     -1114.80  (-105.8% of total)  ########################################
+  TOTAL        :     -1053.29  (-1053.3 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2015.csv
+======================================================================================
+Trading days simulated : 259
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            35    25    10   71.4%    -114.7     -3.28       -229.37   0.40
+Order 2            74    48    26   64.9%     109.4      1.48        218.75   1.38
+Full Trading      272   105   167   38.6%     997.2      3.67       1994.35   1.36
+TOTAL             381   178   203   46.7%     991.9      2.60       1983.72   1.30
+
+Exit reasons per component:
+  Order 1      : market_close=11  tp=24   (best +16.2 / worst -77.6 pips)
+  Order 2      : shutoff=47  tp=27   (best +40.7 / worst -46.9 pips)
+  Full Trading : shutoff=75  sl=141  tp=56   (best +152.0 / worst -52.2 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -229.37  ( -11.6% of total)  ####
+  Order 2      :       218.75  ( +11.0% of total)  ####
+  Full Trading :      1994.35  (+100.5% of total)  ########################################
+  TOTAL        :      1983.72  (+1983.7 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2016.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            31    22     9   71.0%    -211.1     -6.81       -422.21   0.39
+Order 2            77    49    28   63.6%     -13.6     -0.18        -27.25   0.97
+Full Trading      273   106   167   38.8%     297.3      1.09        594.65   1.09
+TOTAL             381   177   204   46.5%      72.6      0.19        145.19   1.02
+
+Exit reasons per component:
+  Order 1      : market_close=12  tp=19   (best +23.5 / worst -206.9 pips)
+  Order 2      : shutoff=53  tp=24   (best +53.1 / worst -125.2 pips)
+  Full Trading : shutoff=84  sl=145  tp=44   (best +126.2 / worst -74.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -422.21  (-290.8% of total)  ########################################
+  Order 2      :       -27.25  ( -18.8% of total)  #######
+  Full Trading :       594.65  (+409.6% of total)  ########################################
+  TOTAL        :       145.19  (+145.2 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2017.csv
+======================================================================================
+Trading days simulated : 259
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            36    29     7   80.6%       2.4      0.07          4.83   1.03
+Order 2            81    49    32   60.5%     -36.0     -0.44        -72.07   0.91
+Full Trading      268    98   170   36.6%      73.3      0.27        146.65   1.03
+TOTAL             385   176   209   45.7%      39.7      0.10         79.41   1.01
+
+Exit reasons per component:
+  Order 1      : market_close=10  tp=26   (best +9.9 / worst -22.6 pips)
+  Order 2      : shutoff=57  tp=24   (best +37.4 / worst -47.0 pips)
+  Full Trading : shutoff=88  sl=139  tp=41   (best +91.0 / worst -74.1 pips)
+
+Comparison (share of total PnL):
+  Order 1      :         4.83  (  +6.1% of total)  ##
+  Order 2      :       -72.07  ( -90.7% of total)  ####################################
+  Full Trading :       146.65  (+184.7% of total)  ########################################
+  TOTAL        :        79.41  (+79.4 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2018.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            26    19     7   73.1%      -9.9     -0.38        -19.84   0.89
+Order 2            87    54    32   62.1%      94.2      1.08        188.37   1.34
+Full Trading      255    87   168   34.1%    -462.1     -1.81       -924.20   0.82
+TOTAL             368   160   207   43.5%    -377.8     -1.03       -755.67   0.87
+
+Exit reasons per component:
+  Order 1      : market_close=7  tp=19   (best +13.9 / worst -28.1 pips)
+  Order 2      : shutoff=53  tp=34   (best +28.8 / worst -36.3 pips)
+  Full Trading : shutoff=84  sl=137  tp=34   (best +82.2 / worst -70.8 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -19.84  (  -2.6% of total)  #
+  Order 2      :       188.37  ( +24.9% of total)  #########
+  Full Trading :      -924.20  (-122.3% of total)  ########################################
+  TOTAL        :      -755.67  (-755.7 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2019.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            31    26     5   83.9%      38.2      1.23         76.36   2.57
+Order 2            53    33    20   62.3%      50.9      0.96        101.80   1.33
+Full Trading      258    90   168   34.9%    -320.6     -1.24       -641.15   0.86
+TOTAL             342   149   193   43.6%    -231.5     -0.68       -463.00   0.91
+
+Exit reasons per component:
+  Order 1      : market_close=7  tp=24   (best +6.3 / worst -11.5 pips)
+  Order 2      : shutoff=36  tp=17   (best +18.6 / worst -45.1 pips)
+  Full Trading : shutoff=85  sl=145  tp=28   (best +92.4 / worst -56.3 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        76.36  ( +16.5% of total)  ######
+  Order 2      :       101.80  ( +22.0% of total)  ########
+  Full Trading :      -641.15  (-138.5% of total)  ########################################
+  TOTAL        :      -463.00  (-463.0 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2020.csv
+======================================================================================
+Trading days simulated : 261
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            37    25    12   67.6%    -117.1     -3.17       -234.29   0.39
+Order 2            89    50    39   56.2%    -111.6     -1.25       -223.24   0.79
+Full Trading      250    98   152   39.2%     274.0      1.10        547.95   1.10
+TOTAL             376   173   203   46.0%      45.2      0.12         90.42   1.01
+
+Exit reasons per component:
+  Order 1      : market_close=13  tp=24   (best +12.4 / worst -39.7 pips)
+  Order 2      : shutoff=63  tp=26   (best +55.2 / worst -39.7 pips)
+  Full Trading : shutoff=75  sl=128  tp=47   (best +148.2 / worst -100.5 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -234.29  (-259.1% of total)  ########################################
+  Order 2      :      -223.24  (-246.9% of total)  ########################################
+  Full Trading :       547.95  (+606.0% of total)  ########################################
+  TOTAL        :        90.42  (+90.4 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2021.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            35    31     4   88.6%      49.6      1.42         99.17   2.04
+Order 2            71    36    34   50.7%    -187.8     -2.64       -375.52   0.46
+Full Trading      265   101   164   38.1%      38.5      0.15         76.90   1.02
+TOTAL             371   168   202   45.3%     -99.7     -0.27       -199.45   0.96
+
+Exit reasons per component:
+  Order 1      : market_close=5  tp=30   (best +12.4 / worst -17.8 pips)
+  Order 2      : shutoff=54  tp=17   (best +16.5 / worst -31.4 pips)
+  Full Trading : shutoff=101  sl=133  tp=31   (best +81.1 / worst -42.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :        99.17  ( +49.7% of total)  ###################
+  Order 2      :      -375.52  (-188.3% of total)  ########################################
+  Full Trading :        76.90  ( +38.6% of total)  ###############
+  TOTAL        :      -199.45  (-199.4 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2022.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            28    20     8   71.4%       0.1      0.00          0.16   1.00
+Order 2            71    42    29   59.2%      22.2      0.31         44.40   1.06
+Full Trading      315   107   208   34.0%    -472.4     -1.50       -944.80   0.88
+TOTAL             414   169   245   40.8%    -450.1     -1.09       -900.24   0.90
+
+Exit reasons per component:
+  Order 1      : market_close=8  tp=20   (best +22.5 / worst -31.2 pips)
+  Order 2      : shutoff=47  tp=24   (best +34.6 / worst -44.5 pips)
+  Full Trading : shutoff=102  sl=176  tp=37   (best +232.7 / worst -95.6 pips)
+
+Comparison (share of total PnL):
+  Order 1      :         0.16  (  +0.0% of total)  
+  Order 2      :        44.40  (  +4.9% of total)  #
+  Full Trading :      -944.80  (-104.9% of total)  ########################################
+  TOTAL        :      -900.24  (-900.2 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2023.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            33    26     7   78.8%     -12.8     -0.39        -25.54   0.88
+Order 2            54    34    20   63.0%      90.8      1.68        181.60   1.60
+Full Trading      216    84   131   38.9%     162.1      0.75        324.30   1.08
+TOTAL             303   144   158   47.5%     240.2      0.79        480.35   1.11
+
+Exit reasons per component:
+  Order 1      : market_close=10  tp=23   (best +13.8 / worst -29.8 pips)
+  Order 2      : shutoff=36  tp=18   (best +25.6 / worst -37.1 pips)
+  Full Trading : shutoff=68  sl=116  tp=32   (best +145.8 / worst -65.0 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -25.54  (  -5.3% of total)  ##
+  Order 2      :       181.60  ( +37.8% of total)  ###############
+  Full Trading :       324.30  ( +67.5% of total)  ###########################
+  TOTAL        :       480.35  (+480.4 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2024.csv
+======================================================================================
+Trading days simulated : 261
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            35    24    10   68.6%     -49.8     -1.42        -99.63   0.59
+Order 2            78    51    26   65.4%      65.9      0.84        131.75   1.31
+Full Trading      277    86   191   31.0%    -517.3     -1.87      -1034.60   0.76
+TOTAL             390   161   227   41.3%    -501.2     -1.29      -1002.48   0.80
+
+Exit reasons per component:
+  Order 1      : market_close=11  tp=24   (best +10.8 / worst -40.1 pips)
+  Order 2      : shutoff=51  tp=27   (best +26.4 / worst -23.9 pips)
+  Full Trading : shutoff=67  sl=172  tp=38   (best +58.0 / worst -32.5 pips)
+
+Comparison (share of total PnL):
+  Order 1      :       -99.63  (  -9.9% of total)  ###
+  Order 2      :       131.75  ( +13.1% of total)  #####
+  Full Trading :     -1034.60  (-103.2% of total)  ########################################
+  TOTAL        :     -1002.48  (-1002.5 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================
+
+
+======================================================================================
+BACKTEST REPORT — DAT_MT_GBPUSD_M1_2025.csv
+======================================================================================
+Trading days simulated : 260
+Order size             : 20,000 units of base currency
+Cost per trade         : 0.0 pips round-trip
+Ambiguous M1 TP+SL bar : resolved as SL (pessimistic)
+
+Component      Trades  Wins  Loss   Win %      Pips  Avg pips   PnL (quote)     PF
+----------------------------------------------------------------------------------
+Order 1            37    26    11   70.3%     -84.4     -2.28       -168.87   0.52
+Order 2            71    45    26   63.4%      -6.4     -0.09        -12.83   0.98
+Full Trading      242    87   153   36.0%    -366.8     -1.52       -733.60   0.82
+TOTAL             350   158   190   45.1%    -457.6     -1.31       -915.29   0.82
+
+Exit reasons per component:
+  Order 1      : market_close=15  tp=22   (best +13.7 / worst -28.2 pips)
+  Order 2      : shutoff=44  tp=27   (best +27.3 / worst -40.2 pips)
+  Full Trading : shutoff=80  sl=131  tp=31   (best +66.0 / worst -74.1 pips)
+
+Comparison (share of total PnL):
+  Order 1      :      -168.87  ( -18.4% of total)  #######
+  Order 2      :       -12.83  (  -1.4% of total)  
+  Full Trading :      -733.60  ( -80.1% of total)  ################################
+  TOTAL        :      -915.29  (-915.3 pips)
+======================================================================================
+NOTE: results are mid-price based. Run with --cost-pips ~0.5-1.5 to
+approximate the GBPUSD spread; intrabar fills use real M1 candles, but
+entries assume MKT fills at the M5 close (same as the live bot's design).
+======================================================================================

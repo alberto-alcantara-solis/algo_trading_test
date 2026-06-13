@@ -484,6 +484,7 @@ class DailyStrategy:
         parent.action        = action
         parent.orderType     = "MKT"
         parent.totalQuantity = qty
+        parent.tif           = ORDER_TIF
         parent.transmit      = False
 
         tp = Order()
@@ -491,29 +492,16 @@ class DailyStrategy:
         tp.orderType     = "LMT"
         tp.lmtPrice      = round(poc, 5)
         tp.totalQuantity = qty
+        tp.tif           = ORDER_TIF
         tp.transmit      = True
 
         parent_trade = None
+        tp_trade     = None
         try:
             parent_trade  = self.ib.placeOrder(self.contract, parent)
             real_entry_price = close
             tp.parentId   = parent_trade.order.orderId
             tp_trade = self.ib.placeOrder(self.contract, tp)
-            self._order1_ib_id = parent_trade.order.orderId
-
-            rec = OrderRecord(
-                ib_order_id    = self._order1_ib_id,
-                tp_order_id    = tp_trade.order.orderId,
-                direction      = direction,
-                entry_price    = real_entry_price,
-                tp_price       = poc,
-                sl_price       = 0.0,
-                total_quantity = qty,
-                is_open        = True,
-                has_sl         = False,
-            )
-            self.sm.record_order1(rec)
-            log.info("Order1 placed: id=%d  tp_id=%d", self._order1_ib_id, tp_trade.order.orderId)
         except Exception as exc:
             log.error("Order1 placement failed: %s", exc)
             if parent_trade is not None:
@@ -521,7 +509,37 @@ class DailyStrategy:
                     self.ib.cancelOrder(parent_trade.order)
                 except Exception:
                     pass
-                self._order1_ib_id = 0
+            self._order1_ib_id = 0
+            return
+        
+        self.ib.sleep(ORDER_REJECT_WAIT_S)
+        if order_rejected(parent_trade):
+            log.error("Order1 REJECTED by IB (%s) — NOT recording it. "
+                      "If this is error 201 (leverage), the account lacks leveraged "
+                      "FX permission: check Client Portal → Trading Permissions.",
+                      last_trade_error(parent_trade))
+            if tp_trade is not None:
+                try:
+                    self.ib.cancelOrder(tp_trade.order)
+                except Exception:
+                    pass
+            self._order1_ib_id = 0
+            return
+
+        self._order1_ib_id = parent_trade.order.orderId
+        rec = OrderRecord(
+            ib_order_id    = self._order1_ib_id,
+            tp_order_id    = tp_trade.order.orderId,
+            direction      = direction,
+            entry_price    = real_entry_price,
+            tp_price       = poc,
+            sl_price       = 0.0,
+            total_quantity = qty,
+            is_open        = True,
+            has_sl         = False,
+        )
+        self.sm.record_order1(rec)
+        log.info("Order1 placed: id=%d  tp_id=%d", self._order1_ib_id, tp_trade.order.orderId)
 
     def _place_order2(self, bar: Bar) -> None:
         """
@@ -573,6 +591,7 @@ class DailyStrategy:
         parent.action        = action
         parent.orderType     = "MKT"
         parent.totalQuantity = qty
+        parent.tif           = ORDER_TIF
         parent.transmit      = False
 
         tp_order = Order()
@@ -580,29 +599,16 @@ class DailyStrategy:
         tp_order.orderType     = "LMT"
         tp_order.lmtPrice      = round(tp, 5)
         tp_order.totalQuantity = qty
+        tp_order.tif           = ORDER_TIF
         tp_order.transmit      = True
 
         parent_trade = None
+        tp_trade     = None
         try:
             parent_trade      = self.ib.placeOrder(self.contract, parent)
             real_entry_price = close
             tp_order.parentId = parent_trade.order.orderId
             tp_trade = self.ib.placeOrder(self.contract, tp_order)
-            self._order2_ib_id = parent_trade.order.orderId
-
-            rec = OrderRecord(
-                ib_order_id    = self._order2_ib_id,
-                tp_order_id    = tp_trade.order.orderId,
-                direction      = direction,
-                entry_price    = real_entry_price,
-                tp_price       = tp,
-                sl_price       = 0.0,
-                total_quantity = qty,
-                is_open        = True,
-                has_sl         = False,
-            )
-            self.sm.record_order2(rec)
-            log.info("Order2 placed: id=%d  tp_id=%d", self._order2_ib_id, tp_trade.order.orderId)
         except Exception as exc:
             log.error("Order2 placement failed: %s", exc)
             if parent_trade is not None:
@@ -610,7 +616,37 @@ class DailyStrategy:
                     self.ib.cancelOrder(parent_trade.order)
                 except Exception:
                     pass
-                self._order2_ib_id = 0
+            self._order2_ib_id = 0
+            return
+
+        self.ib.sleep(ORDER_REJECT_WAIT_S)
+        if order_rejected(parent_trade):
+            log.error("Order2 REJECTED by IB (%s) — NOT recording it. "
+                      "If this is error 201 (leverage), the account lacks leveraged "
+                      "FX permission: check Client Portal → Trading Permissions.",
+                      last_trade_error(parent_trade))
+            if tp_trade is not None:
+                try:
+                    self.ib.cancelOrder(tp_trade.order)
+                except Exception:
+                    pass
+            self._order2_ib_id = 0
+            return
+
+        self._order2_ib_id = parent_trade.order.orderId
+        rec = OrderRecord(
+            ib_order_id    = self._order2_ib_id,
+            tp_order_id    = tp_trade.order.orderId,
+            direction      = direction,
+            entry_price    = real_entry_price,
+            tp_price       = tp,
+            sl_price       = 0.0,
+            total_quantity = qty,
+            is_open        = True,
+            has_sl         = False,
+        )
+        self.sm.record_order2(rec)
+        log.info("Order2 placed: id=%d  tp_id=%d", self._order2_ib_id, tp_trade.order.orderId)
 
 
     # ====================================================================
@@ -720,6 +756,7 @@ class DailyStrategy:
         flat.action        = action
         flat.orderType     = "MKT"
         flat.totalQuantity = qty
+        flat.tif           = "DAY"
         flat.transmit      = True
         try:
             self.ib.placeOrder(self.contract, flat)

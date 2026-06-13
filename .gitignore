@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+#Backtesting files
+backtest_data_fld/*
+*csv
